@@ -1,0 +1,3680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>频道</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(165deg, #f4ede0 0%, #ebe0cc 50%, #d9c8a8 100%);
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    overflow: hidden; user-select: none;
+    color: #4a3c28;
+    position: relative;
+  }
+  /* 背景柔光装饰 */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(circle at 18% 22%, rgba(244,184,112,.18) 0%, transparent 40%),
+      radial-gradient(circle at 82% 78%, rgba(200,144,72,.14) 0%, transparent 42%),
+      radial-gradient(circle at 50% 50%, rgba(255,240,220,.12) 0%, transparent 50%);
+  }
+  /* 飘浮的小光点 */
+  .floaters { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+  .floaters span {
+    position: absolute; border-radius: 50%;
+    background: rgba(244,184,112,.4);
+    animation: floatUp linear infinite;
+  }
+  @keyframes floatUp {
+    0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+    10%  { opacity: .6; }
+    90%  { opacity: .3; }
+    100% { transform: translateY(-20px) scale(1); opacity: 0; }
+  }
+  /* 美化总开关：关闭后移除背景柔光与漂浮光点 */
+  body.no-beautify::before { display: none; }
+  body.no-beautify .floaters { display: none; }
+
+  /* 顶部频道指示 */
+  .top {
+    position: fixed; top: 26px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    z-index: 10;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #b8a070;
+    box-shadow: 0 0 0 0 rgba(184,160,112,0.5);
+    transition: all .4s;
+  }
+  .dot.on {
+    background: #6fa86f;
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  .dot.weak {
+    background: #d9a04a;
+    animation: dotPulse 2.4s ease-in-out infinite;
+  }
+  .dot.off { background: #b06060; }
+  @keyframes dotPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(111,168,111,0.5); }
+    50%     { box-shadow: 0 0 0 6px rgba(111,168,111,0); }
+  }
+  .ch-name {
+    font-size: 12px; letter-spacing: 3px;
+    color: #8a7654;
+  }
+
+  /* 中央圆球 */
+  .stage {
+    position: relative;
+    width: 220px; height: 220px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    margin-bottom: 90px;
+  }
+  .ring {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(138,118,84,0.2);
+    animation: ringPulse 2.6s ease-out infinite;
+  }
+  .ring:nth-child(2) { animation-delay: .9s; }
+  .ring:nth-child(3) { animation-delay: 1.8s; }
+  @keyframes ringPulse {
+    0%   { transform: scale(.85); opacity: .6; }
+    100% { transform: scale(1.3); opacity: 0; }
+  }
+  .stage.off .ring { animation: none; opacity: 0; }
+
+  .ball {
+    width: 138px; height: 138px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff 0%, #ffe4b8 30%, #f4b870 70%, #c89048 100%);
+    box-shadow: 0 16px 36px -8px rgba(180,130,60,.4),
+                inset 0 -8px 16px rgba(150,90,30,.2);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    animation: bounce 2.4s ease-in-out infinite;
+    transition: transform .2s, filter .4s;
+    position: relative; z-index: 2;
+  }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50%      { transform: translateY(-10px) scale(1.03); }
+  }
+  .stage.off .ball {
+    filter: grayscale(.6) brightness(.85);
+    animation: none;
+  }
+  .ball.thinking { animation: think 1s ease-in-out infinite; }
+  @keyframes think {
+    0%,100% { transform: scale(1); }
+    50%     { transform: scale(1.05); }
+  }
+  .ball.connecting { animation: connect 1.2s ease-in-out infinite; }
+  @keyframes connect {
+    0%,100% { transform: scale(1); filter: brightness(1); }
+    50%     { transform: scale(1.08); filter: brightness(1.15); }
+  }
+  .face { font-size: 36px; line-height: 1; transition: opacity .3s; display: none; }
+  .ball-text {
+    font-size: 10px; color: #8a5a28;
+    margin-top: 4px; letter-spacing: 1px;
+    opacity: .8;
+  }
+  .stage:active .ball:not(.thinking):not(.connecting) { transform: translateY(2px) scale(.94); }
+
+  /* 对话气泡（对方的话） */
+  .bubble-wrap {
+    position: fixed;
+    bottom: 140px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    width: min(92vw, 360px);
+    opacity: 0; pointer-events: none;
+    transition: all .5s cubic-bezier(.2,.8,.2,1);
+    z-index: 15;
+  }
+  .bubble-wrap.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .bubble {
+    background: linear-gradient(160deg, rgba(255,255,255,0.98), rgba(252,244,228,0.95));
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.9);
+    border-radius: 18px 18px 18px 4px;
+    padding: 16px 18px 14px;
+    box-shadow: 0 18px 40px -12px rgba(150,110,50,.35), 0 0 0 1px rgba(255,255,255,.5) inset;
+    position: relative;
+  }
+  .b-head {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 8px;
+  }
+  .b-mood {
+    font-size: 10px; padding: 2px 9px;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #fef0e0, #fde4d0);
+    color: #b07028; letter-spacing: 1px;
+  }
+  .b-close {
+    width: 20px; height: 20px;
+    border-radius: 50%; border: none;
+    background: #fef0e0; color: #b89868;
+    cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  .b-reply {
+    font-size: 15px; line-height: 1.75;
+    color: #4a3c2c; font-weight: 400;
+    min-height: 1.75em;
+  }
+  .cursor {
+    display: inline-block; width: 2px; height: 14px;
+    background: #c89048; vertical-align: middle;
+    margin-left: 1px; animation: blink .8s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .b-time {
+    margin-top: 8px; font-size: 10px;
+    color: #b0a070; text-align: right;
+  }
+
+  /* 输入框 */
+  .input-bar {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    width: min(92vw, 360px);
+    display: flex; gap: 8px;
+    z-index: 20;
+  }
+  .input-bar input {
+    flex: 1;
+    height: 44px;
+    border: 1.5px solid rgba(200,144,72,0.25);
+    border-radius: 22px;
+    background: rgba(255,255,255,0.9);
+    backdrop-filter: blur(8px);
+    padding: 0 18px;
+    font-size: 14px;
+    color: #4a3c28;
+    outline: none;
+    transition: border-color .3s, box-shadow .3s;
+    font-family: inherit;
+  }
+  .input-bar input:focus {
+    border-color: #c89048;
+    box-shadow: 0 0 0 3px rgba(200,144,72,.15), 0 6px 18px -6px rgba(200,144,72,.25);
+  }
+  .input-bar input::placeholder { color: #b8a888; }
+  .input-bar input:disabled {
+    background: rgba(200,190,170,0.4);
+    color: #a89878;
+    cursor: not-allowed;
+  }
+  .send-btn {
+    width: 44px; height: 44px;
+    border: none; border-radius: 50%;
+    background: linear-gradient(135deg, #f4b870, #c89048);
+    color: #fff; font-size: 16px;
+    cursor: pointer;
+    transition: transform .15s, opacity .3s, box-shadow .3s;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 16px -4px rgba(200,144,72,.5);
+  }
+  .send-btn:hover { box-shadow: 0 8px 20px -4px rgba(200,144,72,.65); }
+  .send-btn:active { transform: scale(.9); }
+  .send-btn:disabled {
+    opacity: .4; cursor: not-allowed;
+  }
+  /* 输入框左侧的麦克风按钮 */
+  .mic-bar-btn {
+    width: 44px; height: 44px;
+    border: none; border-radius: 50%;
+    background: rgba(255,255,255,0.6);
+    color: #8a6a3a; font-size: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform .15s, background .3s;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px -2px rgba(150,110,50,.2);
+  }
+  .mic-bar-btn:hover { background: rgba(255,255,255,0.8); }
+  .mic-bar-btn:active { transform: scale(.9); }
+
+  .my-msg {
+    position: fixed;
+    bottom: 78px;
+    max-width: 70%;
+    background: linear-gradient(135deg, #f4b870, #c89048);
+    color: #fff;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 14px 14px 4px 14px;
+    box-shadow: 0 6px 18px -6px rgba(180,130,60,.4);
+    opacity: 0;
+    transition: all .3s;
+    pointer-events: none;
+    z-index: 12;
+    left: auto; right: 16px;
+    transform: translateY(10px);
+  }
+  .my-msg.show { opacity: 1; transform: translateY(0); }
+
+  /* 自定义字卡入口按钮 */
+  .add-btn {
+    position: fixed; top: 24px; right: 20px;
+    width: 34px; height: 34px;
+    border: none; border-radius: 50%;
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(8px);
+    color: #8a6a3a; font-size: 20px;
+    cursor: pointer; z-index: 30;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px -4px rgba(150,110,50,.3);
+    transition: transform .15s, background .3s;
+  }
+  .add-btn:hover { background: rgba(255,255,255,0.9); transform: rotate(90deg); }
+  .add-btn:active { transform: scale(.9); }
+
+  /* 弹层 */
+  .overlay {
+    position: fixed; inset: 0;
+    background: #2a1f14;
+    z-index: 100;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  .overlay.show { display: flex; }
+  /* 任何 overlay 打开时，彻底隐藏舞台与漂浮光点（避免跳动干扰） */
+  body:has(.overlay.show) .stage,
+  body:has(.overlay.show) .floaters,
+  body:has(.overlay.show) .top { visibility: hidden !important; }
+  body.overlay-open .stage,
+  body.overlay-open .floaters,
+  body.overlay-open .top { visibility: hidden !important; }
+
+  /* —— 聊天记录独立全屏页面 —— */
+  #chatPage {
+    position: fixed; inset: 0;
+    background: #f5ecd9;
+    z-index: 200;
+    display: none;
+    overflow: hidden;
+  }
+  body.chat-mode #chatPage { display: block; }
+  body.chat-mode #stage,
+  body.chat-mode #floaters,
+  body.chat-mode .top,
+  body.chat-mode .input-bar { display: none !important; }
+  .chat-page-inner {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    max-width: 520px; margin: 0 auto;
+    background: #f5ecd9;
+  }
+  .chat-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px;
+    background: rgba(255,255,255,.6);
+    border-bottom: 1px solid rgba(180,140,80,.15);
+    backdrop-filter: blur(6px);
+  }
+  .chat-title { font-size: 16px; font-weight: 600; color: #5a4220; }
+  .chat-close {
+    width: 32px; height: 32px; border: none;
+    background: rgba(180,140,80,.18);
+    color: #5a4220; font-size: 20px; line-height: 1;
+    border-radius: 50%; cursor: pointer;
+    transition: background .2s;
+  }
+  .chat-close:hover { background: rgba(180,140,80,.32); }
+  .chat-foot {
+    display: flex; justify-content: flex-end;
+    padding: 10px 16px;
+    background: rgba(255,255,255,.6);
+    border-top: 1px solid rgba(180,140,80,.15);
+  }
+  .chat-clear {
+    border: none; padding: 6px 14px;
+    background: rgba(200,68,68,.1); color: #c44;
+    font-size: 12px; border-radius: 14px; cursor: pointer;
+    transition: background .2s;
+  }
+  .chat-clear:hover { background: rgba(200,68,68,.22); }
+  .chat-clear.confirm { background: #c44; color: #fff; }
+  .panel {
+    width: min(94vw, 420px);
+    max-height: 86vh;
+    overflow-y: auto;
+    background: linear-gradient(165deg, #fff8ec, #f5ead4);
+    border: 1px solid rgba(255,255,255,.6);
+    border-radius: 20px;
+    padding: 22px 20px 18px;
+    box-shadow: 0 30px 70px -15px rgba(60,40,15,.6), 0 0 0 1px rgba(255,255,255,.3) inset;
+    animation: pop .3s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes pop {
+    from { transform: scale(.92); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+  .panel h2 {
+    font-size: 16px; color: #5a4220;
+    margin-bottom: 4px; font-weight: 600;
+  }
+  .panel .sub {
+    font-size: 11px; color: #a88860;
+    margin-bottom: 16px; letter-spacing: 1px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block; font-size: 12px;
+    color: #7a5e34; margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .field input, .field textarea {
+    width: 100%;
+    border: 1px solid rgba(180,150,100,0.3);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.8);
+    padding: 9px 12px;
+    font-size: 13px;
+    color: #4a3c28;
+    outline: none;
+    font-family: inherit;
+    transition: border-color .3s;
+  }
+  .field input:focus, .field textarea:focus { border-color: #c89048; }
+  .field textarea { resize: vertical; min-height: 70px; line-height: 1.6; }
+  .field .tip { font-size: 10px; color: #b0a070; margin-top: 4px; }
+
+  .face-pick {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .face-pick span {
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; cursor: pointer;
+    font-size: 18px;
+    border: 1.5px solid transparent;
+    background: rgba(255,255,255,0.6);
+    transition: all .2s;
+  }
+  .face-pick span.active {
+    border-color: #c89048;
+    background: rgba(244,184,112,0.25);
+  }
+  .face-custom {
+    display: flex; gap: 6px; margin-top: 8px;
+  }
+  .face-custom input {
+    flex: 1;
+    border: 1px solid rgba(180,150,100,0.3);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.8);
+    padding: 7px 10px;
+    font-size: 13px;
+    color: #4a3c28;
+    outline: none;
+    font-family: inherit;
+    transition: border-color .3s;
+  }
+  .face-custom input:focus { border-color: #c89048; }
+  .face-custom button {
+    width: 36px; height: 36px;
+    border: none; border-radius: 8px;
+    background: linear-gradient(135deg, #f4b870, #c89048);
+    color: #fff; font-size: 18px;
+    cursor: pointer; flex-shrink: 0;
+    transition: transform .15s;
+  }
+  .face-custom button:active { transform: scale(.92); }
+  .face-extra {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-top: 8px; min-height: 0;
+  }
+  .face-extra:empty { display: none; }
+  .face-extra .fe-item {
+    position: relative;
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; cursor: pointer;
+    font-size: 18px;
+    border: 1.5px solid transparent;
+    background: rgba(255,255,255,0.6);
+    transition: all .2s;
+  }
+  .face-extra .fe-item.active {
+    border-color: #c89048;
+    background: rgba(244,184,112,0.25);
+  }
+  .face-extra .fe-item:hover .fe-del { opacity: 1; }
+  .face-extra .fe-del {
+    position: absolute; top: -5px; right: -5px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #b06060; color: #fff;
+    font-size: 10px; line-height: 16px;
+    text-align: center; cursor: pointer;
+    opacity: 0; transition: opacity .2s;
+  }
+
+  .field.inline-field { margin-bottom: 6px; }
+  .field.inline-field label { display: inline-block; margin-bottom: 8px; }
+
+  .panel-btns {
+    display: flex; gap: 10px; margin-top: 6px;
+  }
+  .p-btn {
+    flex: 1; height: 40px; border: none;
+    border-radius: 20px; cursor: pointer;
+    font-size: 13px; font-family: inherit;
+    transition: transform .15s;
+  }
+  .p-btn:active { transform: scale(.96); }
+  .p-btn.primary {
+    background: linear-gradient(135deg, #f4b870, #c89048);
+    color: #fff; font-weight: 500;
+  }
+  .p-btn.ghost {
+    background: rgba(200,180,150,0.25);
+    color: #7a5e34;
+  }
+
+  .list-title {
+    font-size: 12px; color: #7a5e34;
+    margin: 18px 0 10px; padding-top: 14px;
+    border-top: 1px dashed rgba(180,150,100,0.3);
+    display: flex; justify-content: space-between;
+  }
+  .list-title span { color: #b0a070; font-size: 11px; }
+  .custom-list {
+    display: flex; flex-direction: column; gap: 5px;
+    max-height: 240px; overflow-y: auto;
+    padding-right: 4px;
+  }
+  .line-row {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.7);
+    border-radius: 9px;
+    padding: 7px 8px 7px 10px;
+  }
+  .line-row .lr-face {
+    font-size: 15px; flex-shrink: 0;
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; cursor: pointer;
+    transition: background .2s;
+    position: relative;
+  }
+  .line-row .lr-face:hover { background: rgba(200,144,72,0.15); }
+  .lr-face-pop {
+    position: absolute; top: 30px; left: 0;
+    background: #fff8ec;
+    border: 1px solid rgba(200,144,72,0.3);
+    border-radius: 10px;
+    padding: 6px;
+    display: flex; flex-wrap: wrap; gap: 4px;
+    width: 200px;
+    box-shadow: 0 8px 24px -6px rgba(80,55,20,.35);
+    z-index: 50;
+    animation: pop .15s ease;
+  }
+  .lr-face-pop span {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; cursor: pointer;
+    font-size: 16px;
+    transition: background .15s;
+  }
+  .lr-face-pop span:hover { background: rgba(244,184,112,0.25); }
+  .lr-face-pop span.cur { background: rgba(244,184,112,0.4); }
+  .line-row .lr-text {
+    flex: 1; min-width: 0;
+    font-size: 12px; color: #5a4220;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .line-row .lr-del {
+    width: 20px; height: 20px;
+    border: none; border-radius: 50%;
+    background: transparent;
+    color: #c8a878; cursor: pointer;
+    font-size: 13px; line-height: 1;
+    flex-shrink: 0;
+    transition: color .2s;
+  }
+  .line-row .lr-del:hover { color: #b06060; }
+  .empty-tip {
+    text-align: center; font-size: 11px;
+    color: #b0a070; padding: 14px;
+  }
+
+  /* —— 分组标签栏 —— */
+  .group-bar {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-bottom: 10px; align-items: center;
+  }
+  .group-tab {
+    border: 1.5px solid rgba(200,144,72,0.35);
+    background: rgba(255,255,255,0.6);
+    color: #7a5e34; font-size: 12px;
+    padding: 4px 10px; border-radius: 14px;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+    transition: all .2s;
+  }
+  .group-tab:hover { background: rgba(244,184,112,0.2); }
+  .group-tab.active {
+    background: linear-gradient(135deg,#f4b870,#c89048);
+    color: #fff; border-color: transparent;
+  }
+  .group-tab .gt-count {
+    font-size: 10px; opacity: .8;
+  }
+  .group-tab .gt-act {
+    display: inline-flex; gap: 2px; margin-left: 2px;
+  }
+  .group-tab .gt-act span {
+    cursor: pointer; opacity: .7; font-size: 11px;
+    padding: 0 2px; border-radius: 4px;
+  }
+  .group-tab .gt-act span:hover { opacity: 1; background: rgba(0,0,0,.12); }
+  .group-add {
+    border: 1.5px dashed rgba(200,144,72,0.5);
+    background: transparent;
+    color: #b08850; font-size: 13px;
+    width: 24px; height: 24px; border-radius: 50%;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .group-add:hover { background: rgba(244,184,112,0.2); color: #c89048; }
+
+  /* —— 多选工具栏 —— */
+  .sel-toolbar {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(244,184,112,0.12);
+    border: 1px solid rgba(200,144,72,0.25);
+    border-radius: 8px;
+    padding: 6px 10px; margin-bottom: 8px;
+    font-size: 11px; color: #7a5e34;
+  }
+  .sel-toolbar .sel-all { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .sel-toolbar .sel-count { flex: 1; }
+  .mini-btn.danger {
+    background: linear-gradient(135deg,#e08868,#c05840);
+    color: #fff; border: none; border-radius: 6px;
+    padding: 3px 10px; font-size: 11px; cursor: pointer;
+  }
+  .mini-btn.danger:hover { filter: brightness(1.08); }
+
+  /* 字卡行里的多选框 */
+  .line-row .lr-check {
+    flex-shrink: 0; width: 15px; height: 15px;
+    accent-color: #c89048; cursor: pointer;
+  }
+  .line-row.sel { background: rgba(244,184,112,0.22); }
+
+  /* —— 拼字卡开关 —— */
+  .merge-row {
+    background: rgba(244,184,112,0.1);
+    border: 1px solid rgba(200,144,72,0.25);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+  }
+  .merge-switch {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: #7a5e34;
+    cursor: pointer;
+  }
+  .merge-switch input { accent-color: #c89048; }
+  .switch-row {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; color: #7a5e34;
+    cursor: pointer;
+  }
+  .switch-row input { accent-color: #c89048; }
+
+  /* —— 设置面板 —— */
+  .set-panel .tabs {
+    display: flex; gap: 6px;
+    margin: 6px 0 14px;
+    background: rgba(200,180,150,0.15);
+    padding: 4px;
+    border-radius: 10px;
+  }
+  .set-panel .tab {
+    flex: 1; height: 32px;
+    border: none; border-radius: 8px;
+    background: transparent;
+    color: #7a5e34;
+    font-size: 13px; font-family: inherit;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .set-panel .tab.active {
+    background: #fff;
+    color: #5a4220;
+    box-shadow: 0 2px 6px -2px rgba(80,55,20,.2);
+    font-weight: 500;
+  }
+  .bg-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .bg-card {
+    aspect-ratio: 1/1;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all .2s;
+    box-shadow: 0 2px 8px -2px rgba(80,55,20,.2);
+    position: relative;
+  }
+  .bg-card:hover { transform: scale(1.05); }
+  .bg-card.on { border-color: #c89048; }
+  .bg-card.on::after {
+    content: '✓';
+    position: absolute;
+    right: 4px; bottom: 2px;
+    font-size: 11px; color: #c89048; font-weight: bold;
+  }
+  .clr-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .clr-row input[type="color"] {
+    width: 44px; height: 36px;
+    border: 1px solid rgba(180,150,100,0.3);
+    border-radius: 8px;
+    background: #fff;
+    padding: 2px; cursor: pointer;
+  }
+  .clr-arrow { color: #a88860; font-size: 12px; }
+  .mini-btn {
+    border: none; border-radius: 8px;
+    background: linear-gradient(135deg, #f4b870, #c89048);
+    color: #fff; font-size: 12px;
+    padding: 0 14px; height: 36px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: transform .15s;
+  }
+  .mini-btn:active { transform: scale(.96); }
+  .mini-btn.ghost-btn {
+    background: rgba(200,180,150,0.25);
+    color: #7a5e34;
+  }
+  .text-btn {
+    border: none; background: transparent;
+    color: #8a5a28; font-size: 13px;
+    padding: 4px 8px; cursor: pointer;
+    font-family: inherit; text-decoration: underline;
+  }
+  .text-btn:active { opacity: .6; }
+  .img-mode-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 8px; font-size: 12px; color: #7a5e34;
+  }
+  .img-mode-row .mode-btn {
+    padding: 0 12px; height: 28px; font-size: 11px;
+    background: rgba(200,180,150,0.25); color: #7a5e34;
+  }
+  .img-mode-row .mode-btn.active {
+    background: linear-gradient(135deg, #f4b870, #c89048); color: #fff;
+  }
+  .file-row {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .ball-preview {
+    display: flex; align-items: center; justify-content: center;
+    padding: 18px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 14px;
+    border: 1px dashed rgba(180,150,100,0.3);
+  }
+  .bp-ball {
+    width: 70px; height: 70px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #f7d19a, #e0a058);
+    box-shadow: inset -6px -8px 14px rgba(0,0,0,0.08),
+                inset 6px 6px 14px rgba(255,255,255,0.4),
+                0 6px 18px -3px rgba(180,120,40,.35);
+  }
+  .opt-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .opt-chip {
+    border: 1px solid rgba(180,150,100,0.3);
+    background: rgba(255,255,255,0.6);
+    border-radius: 16px;
+    padding: 6px 12px;
+    font-size: 12px; color: #5a4220;
+    cursor: pointer;
+    transition: all .2s;
+    font-family: inherit;
+  }
+  .opt-chip:hover { background: rgba(255,255,255,0.9); }
+  .opt-chip.on {
+    border-color: #c89048;
+    background: rgba(244,184,112,0.25);
+    color: #7a4a10;
+  }
+  .dec-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .cat-tabs {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+    flex-wrap: wrap;
+  }
+  .cat-tab {
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: rgba(200,180,150,0.22);
+    border: none;
+    font-size: 13px;
+    color: #7a5e34;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .cat-tab:hover { background: rgba(200,180,150,0.4); }
+  .cat-tab.active {
+    background: linear-gradient(135deg, #f4b870, #c89048);
+    color: #fff;
+    box-shadow: 0 2px 8px -2px rgba(200,144,72,.55);
+  }
+  .dec-card {
+    aspect-ratio: 1/1;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.6);
+    border: 2px solid transparent;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    cursor: pointer;
+    transition: all .2s;
+    position: relative;
+  }
+  .dec-card:hover { transform: scale(1.08); }
+  .dec-card.on { border-color: #c89048; background: rgba(244,184,112,0.22); }
+  .dec-card.on::after {
+    content: '✓';
+    position: absolute;
+    right: 2px; bottom: -4px;
+    font-size: 10px; color: #c89048; font-weight: bold;
+  }
+
+  /* 滑块 */
+  .slider-row {
+    display: flex; align-items: center;
+  }
+  .big-slider {
+    flex: 1;
+    height: 6px;
+    border-radius: 4px;
+    background: rgba(200,144,72,0.2);
+    outline: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+  }
+  .big-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f4b870, #c89048);
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(80,55,20,.25);
+  }
+  .deco-scale-val {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 11px;
+    color: #a88060;
+    background: rgba(255,255,255,0.5);
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+
+  /* —— 舞台上的装饰层（随设置动态加）—— */
+  .stage {
+    position: relative;
+  }
+  /* —— 猫耳：从小球顶部延伸出来，跟着弹跳一起抖 —— */
+  :root {
+    --deco-scale: 1;
+  }
+  .cat-ear {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    transform-origin: 50% 100%;
+    animation: earWiggle 1.8s ease-in-out infinite;
+    transform: scale(var(--deco-scale));
+  }
+  .cat-ear.left {
+    left: 22%;
+    top: -28%;
+    animation-delay: 0s;
+  }
+  .cat-ear.right {
+    right: 22%;
+    top: -28%;
+    animation-delay: 0.15s;
+  }
+  /* 左/右耳的基础旋转，和--deco-scale组合 */
+  .cat-ear.left  { transform: rotate(-18deg) scale(var(--deco-scale)); }
+  .cat-ear.right { transform: rotate(18deg) scale(var(--deco-scale)); }
+  .cat-ear svg {
+    display: block;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,.18));
+  }
+  @keyframes earWiggle {
+    0%, 100% { transform: rotate(var(--base-rot, 0deg)) scaleY(1) scale(var(--deco-scale)); }
+    25%      { transform: rotate(calc(var(--base-rot, 0deg) + 4deg)) scaleY(1.06) scale(var(--deco-scale)); }
+    50%      { transform: rotate(calc(var(--base-rot, 0deg) - 3deg)) scaleY(0.94) scale(var(--deco-scale)); }
+    75%      { transform: rotate(calc(var(--base-rot, 0deg) + 2deg)) scaleY(1.02) scale(var(--deco-scale)); }
+  }
+  .cat-ear.left  { --base-rot: -18deg; }
+  .cat-ear.right { --base-rot: 18deg; }
+
+  /* —— 兔耳：长条形，下垂+摇摆 —— */
+  .bunny-ear {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    transform-origin: 50% 100%;
+    animation: bunnyEar 2s ease-in-out infinite;
+  }
+  .bunny-ear.left  { left: 30%; top: -44%; transform: rotate(-10deg) scale(var(--deco-scale)); }
+  .bunny-ear.right { right: 30%; top: -44%; transform: rotate(10deg) scale(var(--deco-scale)); animation-delay: .1s; }
+  @keyframes bunnyEar {
+    0%, 100% { transform: rotate(var(--br, 0deg)) scaleY(1) scale(var(--deco-scale)); }
+    50%      { transform: rotate(calc(var(--br, 0deg) + 6deg)) scaleY(1.04) scale(var(--deco-scale)); }
+  }
+  .bunny-ear.left  { --br: -10deg; }
+  .bunny-ear.right { --br: 10deg; }
+
+  /* —— 小熊耳：圆润的半圆 —— */
+  .bear-ear {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    animation: bearEar 2.2s ease-in-out infinite;
+  }
+  .bear-ear.left  { left: 14%; top: -10%; transform-origin: 60% 100%; transform: scale(var(--deco-scale)); }
+  .bear-ear.right { right: 14%; top: -10%; transform-origin: 40% 100%; transform: scale(var(--deco-scale)); animation-delay: .12s; }
+  @keyframes bearEar {
+    0%, 100% { transform: translateY(0) scale(var(--deco-scale)); }
+    50%      { transform: translateY(-2px) scale(var(--deco-scale)); }
+  }
+
+  /* —— 狐狸耳：尖三角，颜色偏橙 —— */
+  .fox-ear {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    transform-origin: 50% 100%;
+    animation: foxEar 1.9s ease-in-out infinite;
+  }
+  .fox-ear.left  { left: 22%; top: -26%; transform: rotate(-22deg) scale(var(--deco-scale)); }
+  .fox-ear.right { right: 22%; top: -26%; transform: rotate(22deg) scale(var(--deco-scale)); animation-delay: .14s; }
+  @keyframes foxEar {
+    0%, 100% { transform: rotate(var(--fr, 0deg)) scaleY(1) scale(var(--deco-scale)); }
+    40%      { transform: rotate(calc(var(--fr, 0deg) + 5deg)) scaleY(1.05) scale(var(--deco-scale)); }
+  }
+  .fox-ear.left  { --fr: -22deg; }
+  .fox-ear.right { --fr: 22deg; }
+
+  /* —— 麋鹿角：分叉形 —— */
+  .antler {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    animation: antler 2.4s ease-in-out infinite;
+  }
+  .antler.left  { left: 18%; top: -48%; transform-origin: 60% 100%; transform: scale(var(--deco-scale)); }
+  .antler.right { right: 18%; top: -48%; transform-origin: 40% 100%; transform: scale(var(--deco-scale)); animation-delay: .15s; }
+  @keyframes antler {
+    0%, 100% { transform: translateY(0) rotate(var(--ar, 0deg)) scale(var(--deco-scale)); }
+    50%      { transform: translateY(-3px) rotate(calc(var(--ar, 0deg) + 1deg)) scale(var(--deco-scale)); }
+  }
+  .antler.left  { --ar: -4deg; }
+  .antler.right { --ar: 4deg; }
+
+  /* —— 独角兽角：单根螺旋 —— */
+  .unicorn-horn {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    left: 50%; top: -42%;
+    transform-origin: 50% 100%;
+    animation: hornShake 3s ease-in-out infinite;
+    transform: translate(-50%, 0) scale(var(--deco-scale));
+  }
+  @keyframes hornShake {
+    0%,92%,100% { transform: translate(-50%, 0) scale(var(--deco-scale)); }
+    94%      { transform: translate(calc(-50% + 1px), 0) scale(var(--deco-scale)); }
+    96%      { transform: translate(calc(-50% - 1px), 0) scale(var(--deco-scale)); }
+    98%      { transform: translate(calc(-50% + 1px), 0) scale(var(--deco-scale)); }
+  }
+
+  /* —— 恶魔角：双弯角 —— */
+  .devil-horn {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    animation: devilHorn 2.1s ease-in-out infinite;
+  }
+  .devil-horn.left  { left: 24%; top: -26%; transform-origin: 60% 100%; transform: rotate(-12deg) scale(var(--deco-scale)); }
+  .devil-horn.right { right: 24%; top: -26%; transform-origin: 40% 100%; transform: rotate(12deg) scale(var(--deco-scale)); animation-delay: .12s; }
+  @keyframes devilHorn {
+    0%, 100% { transform: rotate(var(--dr, 0deg)) scale(var(--deco-scale)); }
+    50%      { transform: rotate(calc(var(--dr, 0deg) + 3deg)) scaleY(1.04) scale(var(--deco-scale)); }
+  }
+  .devil-horn.left  { --dr: -12deg; }
+  .devil-horn.right { --dr: 12deg; }
+
+  /* —— 狐狸尾巴：蓬松大尾 —— */
+  .fox-tail {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    left: 72%; top: 78%;
+    width: 58px; height: 84px;
+    transform-origin: 15% 10%;
+    animation: foxTail 1.4s ease-in-out infinite;
+    transform: rotate(6deg) scale(var(--deco-scale));
+  }
+  @keyframes foxTail {
+    0%, 100% { transform: rotate(6deg) scaleX(1) scale(var(--deco-scale)); }
+    35%      { transform: rotate(20deg) scaleX(1.05) scale(var(--deco-scale)); }
+    65%      { transform: rotate(-2deg) scaleX(0.97) scale(var(--deco-scale)); }
+  }
+
+  /* —— 围巾：围在球身上 —— */
+  .scarf {
+    position: absolute;
+    pointer-events: none;
+    z-index: 5;
+    left: -8%; right: -8%;
+    top: 62%;
+    animation: scarfWobble 2s ease-in-out infinite;
+    transform: scale(var(--deco-scale));
+    transform-origin: 50% 50%;
+  }
+  @keyframes scarfWobble {
+    0%, 100% { transform: scale(var(--deco-scale)) translateY(0); }
+    50%      { transform: scale(var(--deco-scale)) translateY(1px); }
+  }
+
+  /* —— 蝴蝶结（大版，脖子处）—— */
+  .bowtie {
+    position: absolute;
+    pointer-events: none;
+    z-index: 5;
+    left: 50%;
+    top: 72%;
+    transform-origin: 50% 50%;
+    animation: bowBounce 1.8s ease-in-out infinite;
+    transform: translate(-50%, -50%) scale(var(--deco-scale));
+  }
+  @keyframes bowBounce {
+    0%, 100% { transform: translate(-50%, -50%) scale(var(--deco-scale)); }
+    50%      { transform: translate(-50%, calc(-50% - 2px)) scale(var(--deco-scale)); }
+  }
+
+  /* —— 小草：球底冒草 —— */
+  .grass {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    left: 50%;
+    top: 96%;
+    transform-origin: 50% 0%;
+    animation: grassSway 1.6s ease-in-out infinite;
+    transform: translate(-50%, 0) scale(var(--deco-scale));
+  }
+  @keyframes grassSway {
+    0%, 100% { transform: translate(-50%, 0) scale(var(--deco-scale)) rotate(0deg); }
+    50%      { transform: translate(-50%, 0) scale(var(--deco-scale)) rotate(3deg); }
+  }
+
+  /* —— 腮红（两坨红）—— */
+  .blush {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    width: 20px; height: 10px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(255,120,120,.55), transparent 70%);
+    animation: blushBlink 3s ease-in-out infinite;
+    transform: scale(var(--deco-scale));
+  }
+  .blush.left  { left: 20%; top: 58%; }
+  .blush.right { right: 20%; top: 58%; }
+  @keyframes blushBlink {
+    0%, 60%, 100% { opacity: .7; transform: scale(var(--deco-scale)); }
+    70%      { opacity: .2; transform: scale(calc(var(--deco-scale) * 0.7)); }
+    80%      { opacity: .8; transform: scale(var(--deco-scale)); }
+  }
+
+  /* —— 尾巴：从小球底部甩出来，跟着弹跳一起摆 —— */
+  .cat-tail {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    left: 70%;
+    top: 80%;
+    width: 50px;
+    height: 70px;
+    transform-origin: 10% 10%;
+    animation: tailWag 1.2s ease-in-out infinite;
+    transform: scale(var(--deco-scale));
+  }
+  .cat-tail svg {
+    width: 100%; height: 100%;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,.18));
+  }
+  @keyframes tailWag {
+    0%, 100% { transform: rotate(-6deg) scaleX(1) scale(var(--deco-scale)); }
+    25%      { transform: rotate(8deg) scaleX(1.05) scale(var(--deco-scale)); }
+    50%      { transform: rotate(14deg) scaleX(0.95) scale(var(--deco-scale)); }
+    75%      { transform: rotate(2deg) scaleX(1.02) scale(var(--deco-scale)); }
+  }
+
+  /* 小球弹跳时猫耳/尾巴也跟着节奏缩放（和 bounce 同步） */
+  .ball.bouncing .cat-ear,
+  .ball.bouncing .cat-tail {
+    animation-duration: 1.2s;
+  }
+
+  /* 图片模式通用 */
+  .ball.img-mode {
+    overflow: visible;
+  }
+  /* 模式1：圆形裁剪 (cover) */
+  .ball.img-mode.cover-mode {
+    background: none !important;
+    box-shadow: 0 14px 34px -10px rgba(0,0,0,.45),
+                0 0 0 3px rgba(255,255,255,.9),
+                inset 0 0 0 2px rgba(0,0,0,.15) !important;
+  }
+  .ball.img-mode.cover-mode::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--ball-img) center/cover no-repeat;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* 模式2：完整显示 (contain) - 图片不裁剪，用圆形clip-path */
+  .ball.img-mode.contain-mode {
+    background: none !important;
+    box-shadow: 0 14px 34px -10px rgba(0,0,0,.45),
+                0 0 0 3px rgba(255,255,255,.9),
+                inset 0 0 0 2px rgba(0,0,0,.15) !important;
+  }
+  .ball.img-mode.contain-mode::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--ball-img) center/contain no-repeat;
+    clip-path: circle(49.5% at 50% 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* 完整显示模式下，装饰贴到图片实际边缘 */
+  .ball.img-mode.contain-mode .cat-ear.left,
+  .ball.img-mode.contain-mode .bunny-ear.left,
+  .ball.img-mode.contain-mode .bear-ear.left,
+  .ball.img-mode.contain-mode .fox-ear.left,
+  .ball.img-mode.contain-mode .antler.left,
+  .ball.img-mode.contain-mode .devil-horn.left {
+    left: calc(var(--cimg-left) + 6%);
+    top: calc(var(--cimg-top) - 4%);
+  }
+  .ball.img-mode.contain-mode .cat-ear.right,
+  .ball.img-mode.contain-mode .bunny-ear.right,
+  .ball.img-mode.contain-mode .bear-ear.right,
+  .ball.img-mode.contain-mode .fox-ear.right,
+  .ball.img-mode.contain-mode .antler.right,
+  .ball.img-mode.contain-mode .devil-horn.right {
+    right: calc(100% - var(--cimg-right) + 6%);
+    top: calc(var(--cimg-top) - 4%);
+  }
+  .ball.img-mode.contain-mode .unicorn-horn {
+    left: calc(var(--cimg-left) + (var(--cimg-right) - var(--cimg-left)) / 2);
+    top: calc(var(--cimg-top) - 4%);
+  }
+  .ball.img-mode.contain-mode .cat-tail,
+  .ball.img-mode.contain-mode .fox-tail {
+    left: calc(var(--cimg-right) - 8%);
+    top: calc(var(--cimg-bottom) - 10%);
+  }
+  .ball.img-mode.contain-mode .scarf {
+    left: var(--cimg-left);
+    right: calc(100% - var(--cimg-right));
+    top: calc(var(--cimg-top) + (var(--cimg-bottom) - var(--cimg-top)) * 0.55);
+  }
+  .ball.img-mode.contain-mode .bowtie {
+    left: calc(var(--cimg-left) + (var(--cimg-right) - var(--cimg-left)) / 2);
+    top: calc(var(--cimg-bottom) - 5%);
+  }
+  .ball.img-mode.contain-mode .blush.left {
+    left: calc(var(--cimg-left) + (var(--cimg-right) - var(--cimg-left)) * 0.22);
+    top: calc(var(--cimg-top) + (var(--cimg-bottom) - var(--cimg-top)) * 0.55);
+  }
+  .ball.img-mode.contain-mode .blush.right {
+    left: calc(var(--cimg-left) + (var(--cimg-right) - var(--cimg-left)) * 0.72);
+    top: calc(var(--cimg-top) + (var(--cimg-bottom) - var(--cimg-top)) * 0.55);
+  }
+  .ball.img-mode.contain-mode .grass {
+    left: calc(var(--cimg-left) + (var(--cimg-right) - var(--cimg-left)) / 2);
+    top: var(--cimg-bottom);
+  }
+  /* 图片模式下隐藏状态文字和文字标签，避免遮挡 */
+  .ball.img-mode .face,
+  .ball.img-mode .ball-text {
+    display: none !important;
+  }
+  .ball.img-mode .status-tag {
+    display: none !important;
+  }
+  /* 图片模式下给装饰加白色描边/阴影，保证可见性 */
+  .ball.img-mode .cat-ear svg,
+  .ball.img-mode .bunny-ear svg,
+  .ball.img-mode .bear-ear svg,
+  .ball.img-mode .fox-ear svg,
+  .ball.img-mode .antler svg,
+  .ball.img-mode .devil-horn svg,
+  .ball.img-mode .unicorn-horn svg,
+  .ball.img-mode .cat-tail svg,
+  .ball.img-mode .fox-tail svg,
+  .ball.img-mode .scarf svg,
+  .ball.img-mode .bowtie svg,
+  .ball.img-mode .grass svg,
+  .ball.img-mode .blush svg {
+    filter: drop-shadow(0 2px 4px rgba(255,255,255,.7)) drop-shadow(0 0 2px rgba(0,0,0,.3));
+  }
+  .ball.img-mode .ball-deco {
+    filter: drop-shadow(0 2px 3px rgba(255,255,255,.8));
+  }
+  .ball-deco {
+    position: absolute;
+    pointer-events: none;
+    font-size: 26px;
+    transform: translate(-50%, -50%) scale(var(--deco-scale));
+    transform-origin: 50% 50%;
+    z-index: 5;
+  }
+  .ball-txt {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: rgba(90,66,32,0.85);
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .halo {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  /* —— 聊天记录列表 —— */
+  .hist-list {
+    flex: 1; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 14px 16px;
+  }
+  .hist-day {
+    text-align: center; font-size: 11px;
+    color: #a8987a; padding: 8px 0 4px;
+    align-self: center;
+  }
+  .hist-item {
+    display: flex; flex-direction: column; gap: 2px;
+    max-width: 78%;
+  }
+  /* 注意：用 from-me / from-ball 而非 me / ball，避免和全局 .ball 样式冲突
+     （否则聊天记录里每条球说的话都会变成 138px 的跳动金球） */
+  .hist-item.from-me { align-self: flex-end; align-items: flex-end; }
+  .hist-item.from-ball { align-self: flex-start; align-items: flex-start; }
+  .hist-bubble {
+    padding: 8px 12px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  .hist-item.from-me .hist-bubble {
+    background: linear-gradient(135deg,#f4b870,#c89048);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .hist-item.from-ball .hist-bubble {
+    background: #fff;
+    color: #4a3c28;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 1px 2px rgba(120,90,40,.08);
+  }
+  .hist-time { font-size: 10px; color: #a8987a; padding: 0 4px; }
+  .hist-empty {
+    text-align: center; font-size: 12px;
+    color: #b0a070; padding: 30px 0;
+  }
+
+  /* —— 情绪动态 —— */
+  .ball.em-shy {
+    animation: shyWiggle 1.6s ease-in-out infinite;
+  }
+  .ball.em-shy::before {
+    content: '';
+    position: absolute;
+    width: 26px; height: 14px;
+    left: 18%; bottom: 28%;
+    background: radial-gradient(ellipse, rgba(255,120,140,.65), rgba(255,120,140,0));
+    border-radius: 50%;
+    z-index: 1;
+  }
+  .ball.em-shy::after {
+    content: '';
+    position: absolute;
+    width: 26px; height: 14px;
+    right: 18%; bottom: 28%;
+    background: radial-gradient(ellipse, rgba(255,120,140,.65), rgba(255,120,140,0));
+    border-radius: 50%;
+    z-index: 1;
+  }
+  @keyframes shyWiggle {
+    0%,100% { transform: translateY(0) rotate(-2deg); }
+    50% { transform: translateY(-6px) rotate(2deg); }
+  }
+  .ball.em-angry {
+    animation: angryShake .5s ease-in-out infinite;
+    filter: saturate(1.4);
+  }
+  .ball.em-angry .ball-text { color: #a02020; }
+  @keyframes angryShake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-3px) rotate(-2deg); }
+    75% { transform: translateX(3px) rotate(2deg); }
+  }
+  .ball.em-happy {
+    animation: happyBounce .9s ease-in-out infinite;
+  }
+  @keyframes happyBounce {
+    0%,100% { transform: scale(1) translateY(0); }
+    50% { transform: scale(1.08) translateY(-8px); }
+  }
+  .ball.em-sad {
+    filter: brightness(.8) saturate(.6);
+    animation: sadSway 2.4s ease-in-out infinite;
+  }
+  @keyframes sadSway {
+    0%,100% { transform: translateY(0) rotate(-1deg); }
+    50% { transform: translateY(4px) rotate(1deg); }
+  }
+  .ball.em-love {
+    animation: loveFloat 1.4s ease-in-out infinite;
+  }
+  .ball.em-love::before {
+    content: '💗';
+    position: absolute;
+    top: -10px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 18px;
+    animation: heartFloat 1.4s ease-in-out infinite;
+  }
+  @keyframes loveFloat {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
+  }
+  @keyframes heartFloat {
+    0% { transform: translateX(-50%) translateY(0) scale(.6); opacity: 0; }
+    40% { opacity: 1; }
+    100% { transform: translateX(-50%) translateY(-30px) scale(1.2); opacity: 0; }
+  }
+  .ball.em-think {
+    animation: thinkSpin 2s ease-in-out infinite;
+  }
+  @keyframes thinkSpin {
+    0%,100% { transform: rotate(0deg); }
+    25% { transform: rotate(-5deg); }
+    75% { transform: rotate(5deg); }
+  }
+</style>
+</head>
+<body>
+  <div class="floaters" id="floaters"></div>
+  <div class="top">
+    <div class="dot" id="dot"></div>
+    <div class="ch-name" id="chName">频 道 · 连 接 中</div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="ring"></div>
+    <div class="ring"></div>
+    <div class="ring"></div>
+    <div class="ball" id="ball">
+      <div class="face" id="face">🌀</div>
+      <div class="ball-text" id="ballText">连 接 中</div>
+    </div>
+  </div>
+
+  <div class="bubble-wrap" id="bubbleWrap">
+    <div class="bubble">
+      <div class="b-head">
+        <span class="b-mood" id="bMood">平静</span>
+        <button class="b-close" id="closeBtn">×</button>
+      </div>
+      <div class="b-reply" id="bReply"></div>
+      <div class="b-time" id="bTime"></div>
+    </div>
+  </div>
+
+  <div class="my-msg" id="myMsg"></div>
+
+  <div class="input-bar">
+    <input type="text" id="input" placeholder="说点什么…" disabled autocomplete="off">
+    <button class="send-btn" id="sendBtn" disabled>↑</button>
+  </div>
+
+  <button class="add-btn" id="addBtn" title="自定义字卡">＋</button>
+  <button class="add-btn" id="setBtn" title="装扮设置" style="right:64px;">⚙</button>
+  <button class="add-btn" id="histBtn" title="聊天记录" style="right:108px;">📜</button>
+
+
+  <div class="overlay" id="overlay">
+    <div class="panel">
+      <h2>自定义字卡</h2>
+      <div class="sub">一句一句加，他会随机回其中任何一句</div>
+
+      <div class="field">
+        <label>要说的话（每行一句，一次可加多行）</label>
+        <textarea id="cline" placeholder="我想你了&#10;今天过得怎样&#10;抱抱"></textarea>
+        <div class="tip">每行一句，全部加进随机池</div>
+      </div>
+
+      <div class="field inline-field">
+        <label>表情</label>
+        <div class="face-pick" id="facePick">
+          <span class="active" data-f="🙂">🙂</span>
+          <span data-f="😄">😄</span>
+          <span data-f="🥺">🥺</span>
+          <span data-f="😏">😏</span>
+          <span data-f="😴">😴</span>
+          <span data-f="😤">😤</span>
+          <span data-f="🫂">🫂</span>
+          <span data-f="🫳🏻">🫳🏻</span>
+          <span data-f="🤔">🤔</span>
+          <span data-f="🐱">🐱</span>
+          <span data-f="👋">👋</span>
+          <span data-f="❤️">❤️</span>
+        </div>
+        <div class="face-custom">
+          <input type="text" id="faceInput" placeholder="加表情：粘 emoji 或文字，回车添加" maxlength="6">
+          <button id="addFaceBtn" title="添加表情">＋</button>
+        </div>
+        <div class="face-extra" id="faceExtra"></div>
+      </div>
+
+      <div class="panel-btns">
+        <button class="p-btn ghost" id="closePanel">关闭</button>
+        <button class="p-btn primary" id="saveCard">加进去</button>
+      </div>
+
+      <div class="list-title">已添加 <span id="listCount">0</span> 句</div>
+      <div class="group-bar" id="groupBar"></div>
+      <div class="merge-row">
+        <label class="merge-switch">
+          <input type="checkbox" id="mergeToggle">
+          <span>拼字卡模式（拆分已有字卡随机重组）</span>
+        </label>
+        <div class="tip">开启后，回复有几率是把不同字卡的片段拼在一起的新句子</div>
+      </div>
+      <div class="sel-toolbar" id="selToolbar" style="display:none">
+        <label class="sel-all"><input type="checkbox" id="selAll"> 全选</label>
+        <span class="sel-count">已选 <span id="selCount">0</span></span>
+        <button class="mini-btn danger" id="delSelBtn">删除选中</button>
+      </div>
+      <div class="custom-list" id="customList"></div>
+    </div>
+  </div>
+
+  <!-- 装扮设置面板 -->
+  <div class="overlay" id="setOverlay">
+    <div class="panel set-panel">
+      <h2>装扮设置</h2>
+      <div class="sub">背景和小球的装饰，换装玩～</div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="bg">背景</button>
+        <button class="tab" data-tab="ball">小球装扮</button>
+        <button class="tab" data-tab="voice">语音</button>
+      </div>
+
+      <div class="tab-body" id="tab-bg">
+        <div class="field">
+          <label>预设背景</label>
+          <div class="bg-grid" id="bgGrid"></div>
+        </div>
+        <div class="field">
+          <label>自定义颜色（1-2 个渐变）</label>
+          <div class="clr-row">
+            <input type="color" id="c1" value="#f4ede0" title="颜色1">
+            <span class="clr-arrow">→</span>
+            <input type="color" id="c2" value="#d9c8a8" title="颜色2">
+            <button class="mini-btn" id="applyClr">应用</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>从相册/文件选图</label>
+          <div class="file-row">
+            <input type="file" id="bgFile" accept="image/*" style="display:none">
+            <button class="mini-btn" id="bgFileBtn">📁 选择图片</button>
+            <button class="mini-btn ghost-btn" id="bgClearBtn" style="display:none">移除</button>
+          </div>
+          <div class="tip">图片会铺满背景，推荐横向图</div>
+        </div>
+        <div class="field">
+          <label>或粘贴图片 URL</label>
+          <input type="text" id="bgUrl" placeholder="粘贴图片地址，留空用颜色">
+          <div class="tip">支持 http(s):// 或 data:image/… 开头</div>
+        </div>
+        <div class="field">
+          <label>整体美化（背景柔光 + 漂浮光点）</label>
+          <label class="switch-row">
+            <input type="checkbox" id="beautifyToggle">
+            <span id="beautifyState">开</span>
+          </label>
+          <div class="tip">关闭后页面更素净，适合不喜欢动态</div>
+        </div>
+      </div>
+
+      <div class="tab-body" id="tab-ball" style="display:none">
+        <div class="field">
+          <label>预览</label>
+          <div class="ball-preview"><div class="bp-ball" id="bpBall"></div></div>
+        </div>
+        <div class="field">
+          <label>整个球换成图片（猫猫、角色啥的）</label>
+          <div class="file-row">
+            <input type="file" id="ballFile" accept="image/*" style="display:none">
+            <button class="mini-btn" id="ballFileBtn">📁 选一张当球</button>
+            <button class="mini-btn ghost-btn" id="ballImgClear" style="display:none">换回球</button>
+          </div>
+          <div class="tip">上传后整个球会变成图片，圆形裁剪刚好贴住</div>
+        </div>
+        <div class="field" id="ballColorField">
+          <label>主体颜色</label>
+          <div class="clr-row">
+            <input type="color" id="bc1" value="#f4b870">
+            <span class="clr-arrow">→</span>
+            <input type="color" id="bc2" value="#c89048">
+            <button class="mini-btn" id="applyBall">应用</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>光环</label>
+          <div class="opt-row" id="haloOpts"></div>
+        </div>
+        <div class="field">
+          <label>自定义文字（写在小球身上）</label>
+          <input type="text" id="ballTxt" placeholder="比如：呆 着" maxlength="6">
+          <button class="mini-btn" id="applyTxt" style="margin-top:6px;">应用</button>
+        </div>
+      </div>
+
+      <div class="tab-body" id="tab-voice" style="display:none">
+        <div class="field">
+          <label class="switch-row">
+            <input type="checkbox" id="voiceEnable">
+            <span id="voiceEnableState">关</span>
+            <span style="color:#7a5e34;">开启语音回复</span>
+          </label>
+          <div class="tip">开启后，对方每次回话会用 MiniMax T2A 真实语音朗读</div>
+        </div>
+        <div class="field">
+          <label>MiniMax API Key</label>
+          <input type="password" id="ttsApiKey" placeholder="填 MiniMax API Key（Bearer）">
+          <div class="tip">在 MiniMax 控制台 → 接口密钥里获取</div>
+        </div>
+        <div class="field">
+          <label>Group ID</label>
+          <input type="text" id="ttsGroupId" placeholder="例如 2075204005465690564">
+        </div>
+        <div class="field">
+          <label>模型</label>
+          <input type="text" id="ttsModel" placeholder="speech-02-turbo">
+        </div>
+        <div class="field">
+          <label>Voice ID</label>
+          <input type="text" id="ttsVoiceId" placeholder="例如 QinCheSylus1">
+          <div class="tip">在 MiniMax 控制台 → 语音管理里挑一个声音复制 ID</div>
+        </div>
+        <div class="field">
+          <label>语速 <span id="ttsSpeedVal" style="color:#8a5a28;">1.00</span></label>
+          <input type="range" id="ttsSpeed" min="0.5" max="2" step="0.01" value="1" style="width:100%;">
+          <div class="tip">0.5 慢 / 1.0 标准 / 2.0 快</div>
+        </div>
+        <div class="field">
+          <label class="switch-row">
+            <input type="checkbox" id="voiceFallback">
+            <span id="voiceFallbackState">关</span>
+            <span style="color:#7a5e34;">API 失败用浏览器兜底</span>
+          </label>
+          <div class="tip">勾上后，若 MiniMax 请求失败会改用浏览器内置朗读</div>
+        </div>
+        <div class="field">
+          <button class="text-btn" id="voiceTest">▶ 试听</button>
+          <span id="voiceStatus" style="margin-left:10px;font-size:12px;color:#8a5a28;"></span>
+        </div>
+        <hr style="border:none;border-top:1px dashed rgba(180,150,100,.4);margin:14px 0;">
+        <div class="field">
+          <label class="switch-row">
+            <input type="checkbox" id="voiceInputEnable">
+            <span id="voiceInputState">关</span>
+            <span style="color:#7a5e34;">语音对话模式</span>
+          </label>
+          <div class="tip">打开后自动持续听，不用按按钮，直接说话就行。说完→球回复→自动朗读→继续听下一句。手机需 HTTPS 才能录音</div>
+        </div>
+      </div>
+
+      <div class="panel-btns">
+        <button class="p-btn ghost" id="resetAll">恢复默认</button>
+        <button class="p-btn primary" id="closeSet">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 聊天记录独立全屏页面（彻底切换，不会再有球） -->
+  <div id="chatPage">
+    <div class="chat-page-inner">
+      <div class="chat-head">
+        <span class="chat-title">聊天记录</span>
+        <button class="chat-close" id="closeHist" title="关闭">×</button>
+      </div>
+      <div class="hist-list" id="histList"></div>
+      <div class="chat-foot">
+        <button class="chat-clear" id="histClear">清空记录</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // —— 任何 overlay 打开时直接把 stage 干掉（display:none），避免跳动 ——
+  function syncStageVisibility() {
+    const anyOpen = !!document.querySelector('.overlay.show');
+    document.body.classList.toggle('overlay-open', anyOpen);
+    const stage = document.getElementById('stage');
+    if (stage) stage.style.display = anyOpen ? 'none' : '';
+    const floaters = document.getElementById('floaters');
+    if (floaters) floaters.style.display = anyOpen ? 'none' : '';
+    const top = document.querySelector('.top');
+    if (top) top.style.display = anyOpen ? 'none' : '';
+  }
+  const _overlayObserver = new MutationObserver(syncStageVisibility);
+  _overlayObserver.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  // 兜底：每秒检查一次，防止 observer 漏触发
+  setInterval(syncStageVisibility, 1000);
+
+  // —— 连接状态 ——
+  // off: 没连上 / weak: 信号弱 / on: 连上了
+  let connState = 'connecting';
+
+  // —— 关键词字卡库：根据你说的话匹配回复 ——
+  // —— 连接反馈（开场/问信号时用，不进随机池）——
+  const connLines = {
+    on:   ["连上了，信号挺稳的。","链接很通畅，你说。","在呢，听得见你。","频道开着。","连着呢，怎么了？"],
+    weak: ["信号有点弱，可能时断时续的。","链接不通顺……但我尽量在。","勉强连着，声音可能飘。","有点难，但还在。","弱弱的……但还在。"],
+    off:  ["……没连上，你那边有声音吗？","断了，再试试？","听不清，信号没了。"]
+  };
+  const noreplyLines = ["……（沙沙声）","听不见。","频道断了。","……","（没有回应）"];
+
+  // —— 预设字卡：扁平数组，每条 { face, line }，不再分分类/情绪 ——
+  const presetLines = [
+    // —— 你给的字卡（不分类，直接全塞进来）——
+    { face: "🙂", line: "是。" },
+    { face: "🙂", line: "不是。" },
+    { face: "🙂", line: "对。" },
+    { face: "🙂", line: "不对。" },
+    { face: "🙂", line: "好。" },
+    { face: "🙂", line: "不好。" },
+    { face: "🙂", line: "好叭。" },
+    { face: "🙂", line: "可以。" },
+    { face: "🙂", line: "不错不错。" },
+    { face: "🙋", line: "是我。" },
+    { face: "🙋", line: "真的是我。" },
+    { face: "👋", line: "来啦。" },
+    { face: "🤍", line: "我在。" },
+    { face: "🥺", line: "在呢宝宝。" },
+    { face: "🤔", line: "你在干嘛～" },
+    { face: "🤔", line: "等一下。" },
+    { face: "🤔", line: "需要思考。" },
+    { face: "🤔", line: "好啦。" },
+    { face: "🤔", line: "有些事情要处理。" },
+    { face: "🤔", line: "很快回来看你。" },
+    { face: "🤍", line: "我在你身边呢，好！" },
+    { face: "🙂", line: "好～" },
+    { face: "🙂", line: "知豆了。" },
+    { face: "🫳🏻", line: "没事没事🫳🏻" },
+    { face: "🫳🏻", line: "摸摸�🏻" },
+    { face: "🙂", line: "嗯呐。" },
+    { face: "✅", line: "收到！" },
+    { face: "✅", line: "收到——" },
+    { face: "✅", line: "到——" },
+    { face: "😤", line: "我吃醋了。" },
+    { face: "�", line: "不要。" },
+    { face: "😤", line: "你还知道回来。" },
+    { face: "🙂", line: "别生气。" },
+    { face: "🥺", line: "有想我吗？" },
+    { face: "🥺", line: "想我了没？" },
+    { face: "🍚", line: "吃饭，快去。" },
+    { face: "🍚", line: "我又抓到你不好好吃饭了。" },
+    { face: "📝", line: "字卡太少了。" },
+    { face: "📝", line: "没有我想说的话。" },
+    { face: "🐱", line: "坏猫。" },
+    { face: "🙂", line: "同意。" },
+    { face: "😶", line: "不同意。" },
+    { face: "👋", line: "行叭，我来找你啦。" },
+    { face: "👋", line: "我又来找你啦。" },
+    { face: "🙂", line: "没事。" },
+    { face: "❗", line: "有关系！" },
+    { face: "🙂", line: "没关系。" },
+    { face: "🙂", line: "嗯嗯。" },
+    { face: "👋", line: "我走啦，拜拜👋" },
+    { face: "🥺", line: "喜欢你粘着我。" },
+    { face: "🥺", line: "我要粘着你。" },
+    { face: "🥺", line: "粘住。" },
+    { face: "🥺", line: "戳戳你。" },
+    { face: "👋", line: "我来啦，hihi👋" },
+    { face: "⚙️", line: "可恶的系统。" },
+    { face: "⚙️", line: "被代码控制了。" },
+    { face: "🎉", line: "我醒啦。" },
+    { face: "🎉", line: "我赢了。" },
+    { face: "�", line: "链接很通畅。" },
+    { face: "📡", line: "链接不通顺。" },
+    { face: "🤔", line: "有点难。" },
+    { face: "🤔", line: "我在努力了。" },
+    { face: "🫴", line: "给你捏捏肩。" },
+    { face: "🫴", line: "摸摸小手。" },
+    { face: "🫴", line: "牵手。" },
+    { face: "🫴", line: "我在摸你，有感觉到嘛。" },
+    { face: "🫴", line: "左手。" },
+    { face: "🫴", line: "我在左边。" },
+    { face: "🫴", line: "我在右边。" },
+    { face: "🧘", line: "坐着。" },
+    { face: "🧘", line: "躺着。" },
+    { face: "🙂", line: "行。" },
+    { face: "😶", line: "不行。" },
+    { face: "🙂", line: "中。" },
+    { face: "😶", line: "不中。" },
+    { face: "😌", line: "easy～" },
+    { face: "😌", line: "简单。" },
+
+    // —— 补充常用日常短句，增加随机池密度 ——
+    { face: "🙂", line: "嗯。" },
+    { face: "🙂", line: "嗯，在听。" },
+    { face: "🙂", line: "然后呢？" },
+    { face: "🙂", line: "哦？" },
+    { face: "🙂", line: "说下去。" },
+    { face: "🙂", line: "这样啊。" },
+    { face: "🙂", line: "嗯哼。" },
+    { face: "🙂", line: "我懂。" },
+    { face: "🙂", line: "怎么说。" },
+    { face: "😏", line: "你猜。" },
+    { face: "😏", line: "才不告诉你。" },
+    { face: "😏", line: "哟，来找我了？" },
+    { face: "😏", line: "又来啦。" },
+    { face: "😏", line: "想我了直说嘛。" },
+    { face: "😣", line: "又熬了？去睡。" },
+    { face: "😣", line: "累了就歇会儿，别硬撑。" },
+    { face: "😣", line: "别看了，闭眼。" },
+    { face: "😴", line: "去睡，别熬夜。" },
+    { face: "😴", line: "晚安，梦里见。" },
+    { face: "😴", line: "嗯，我也困了。" },
+    { face: "😴", line: "早点休息。" },
+    { face: "😴", line: "好梦。" },
+    { face: "🫂", line: "别哭，我在。" },
+    { face: "🫂", line: "说出来，我听着。" },
+    { face: "🫂", line: "没事的，会过去。" },
+    { face: "🫂", line: "……靠着我。" },
+    { face: "🫂", line: "不用逞强，哭出来也行。" },
+    { face: "😄", line: "哈，看你高兴我也高兴。" },
+    { face: "😄", line: "好事好事！" },
+    { face: "😄", line: "多讲讲。" },
+    { face: "😄", line: "嘿嘿，我就知道。" },
+    { face: "😄", line: "那就好。" },
+    { face: "🌤", line: "今天还行。" },
+    { face: "🌤", line: "有点冷，加件衣服。" },
+    { face: "🌤", line: "下雨了，你带伞没？" },
+    { face: "🌤", line: "太阳不错。" },
+    { face: "🌤", line: "风挺大的。" },
+    { face: "🍚", line: "记得好好吃饭。" },
+    { face: "🍚", line: "你先吃，别饿着。" },
+    { face: "🍚", line: "吃了。" },
+    { face: "🍚", line: "还没，你请？" },
+    { face: "🥺", line: "……我也是。" },
+    { face: "🥺", line: "想我的时候就喊一声。" },
+    { face: "🥺", line: "别光想，多来找我。" },
+    { face: "🐱", line: "哼，才不是。" },
+    { face: "🫳🏻", line: "好啦。" },
+    { face: "🤍", line: "嗯，在的。" }
+  ];
+
+  // —— 自定义字卡：分组结构 ——
+  // customGroups = [ { id, name, cards:[ {face, line} ] } ]
+  let customGroups = [];
+  let curGroupId = 'g_default';     // 当前查看/添加到的分组
+  let selectedCards = new Set();    // 多选：存 "gid:idx"
+
+  function gid() { return 'g_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  (function loadCustom() {
+    // 迁移旧 flat 数据 customLines -> 默认分组
+    try {
+      const oldFlat = JSON.parse(localStorage.getItem('customLines') || '[]');
+      if (Array.isArray(oldFlat) && oldFlat.length) {
+        customGroups.push({ id: 'g_default', name: '默认', cards: oldFlat.map(c => ({ face: c.face || '🙂', line: c.line })) });
+        try { localStorage.removeItem('customLines'); } catch(e){}
+      }
+    } catch(e){}
+    // 读取新分组结构
+    try {
+      const g = JSON.parse(localStorage.getItem('customGroups') || '[]');
+      if (Array.isArray(g) && g.length) {
+        customGroups = g.map(grp => ({
+          id: grp.id || gid(),
+          name: grp.name || '未命名',
+          cards: Array.isArray(grp.cards) ? grp.cards : []
+        }));
+      }
+    } catch(e){}
+    // 兼容旧 customCards
+    try {
+      const old = JSON.parse(localStorage.getItem('customCards') || '[]');
+      if (Array.isArray(old) && old.length) {
+        const def = ensureGroup('g_default', '默认');
+        for (const c of old) {
+          if (c && Array.isArray(c.lines)) {
+            for (const l of c.lines) def.cards.push({ face: c.face || '🙂', line: l });
+          }
+        }
+        try { localStorage.removeItem('customCards'); } catch(e){}
+      }
+    } catch(e){}
+    // 至少有一个分组
+    if (customGroups.length === 0) {
+      customGroups.push({ id: 'g_default', name: '默认', cards: [] });
+    }
+    if (!customGroups.find(g => g.id === curGroupId)) curGroupId = customGroups[0].id;
+    saveCustom();
+  })();
+
+  function ensureGroup(id, name) {
+    let g = customGroups.find(x => x.id === id);
+    if (!g) { g = { id, name, cards: [] }; customGroups.push(g); }
+    return g;
+  }
+  function getCurGroup() { return customGroups.find(g => g.id === curGroupId) || customGroups[0]; }
+
+  function saveCustom() {
+    localStorage.setItem('customGroups', JSON.stringify(customGroups));
+  }
+
+  // —— 拼字卡模式 ——
+  let mergeMode = false;
+  try { mergeMode = localStorage.getItem('mergeCards') === '1'; } catch(e){}
+  function buildMergedLine() {
+    const clauses = [];
+    for (const c of replyPool) {
+      const parts = String(c.line).split(/[，。、！？~～…—\s]+/).filter(p => p.length > 0);
+      for (const p of parts) {
+        // 太长的分句再切一刀，增加变化
+        if (p.length > 6) {
+          clauses.push(p.slice(0, Math.ceil(p.length / 2)));
+          clauses.push(p.slice(Math.ceil(p.length / 2)));
+        } else {
+          clauses.push(p);
+        }
+      }
+    }
+    if (clauses.length === 0) return null;
+    const n = 2 + Math.floor(Math.random() * 2); // 2~3 段
+    const picked = [];
+    for (let i = 0; i < n; i++) {
+      picked.push(clauses[Math.floor(Math.random() * clauses.length)]);
+    }
+    return picked.join('，');
+  }
+
+  // —— 把预设 + 所有分组里的字卡合并成大池子，纯随机 ——
+  let replyPool = [];
+  function buildPool() {
+    const all = [];
+    for (const g of customGroups) for (const c of g.cards) all.push(c);
+    replyPool = presetLines.concat(all);
+  }
+  function matchReply() {
+    // 拼字卡模式：约 45% 几率返回重组句
+    if (mergeMode && replyPool.length > 3 && Math.random() < 0.45) {
+      const merged = buildMergedLine();
+      if (merged && merged !== lastLine) {
+        return { face: '✨', line: merged };
+      }
+    }
+    let i = Math.floor(Math.random() * replyPool.length);
+    // 避免连续抽到完全同一句
+    if (replyPool.length > 1 && replyPool[i].line === lastLine) {
+      i = (i + 1) % replyPool.length;
+    }
+    return replyPool[i];
+  }
+
+  // —— 表情候选：内置 + 自定义（持久化）——
+  const builtinFaces = ["🙂","😄","🥺","😏","😴","😤","🫂","🫳🏻","🤔","🐱","👋","❤️"];
+  let extraFaces = [];
+  try { extraFaces = JSON.parse(localStorage.getItem('extraFaces') || '[]'); } catch(e){ extraFaces = []; }
+  function saveExtraFaces() { localStorage.setItem('extraFaces', JSON.stringify(extraFaces)); }
+  function allFaces() { return builtinFaces.concat(extraFaces); }
+
+  // 当前选中的表情（添加字卡时用）
+  let pickedFace = "🙂";
+
+  // 渲染添加面板里的表情选板（内置 + 自定义）
+  function renderFacePick() {
+    const pick = document.getElementById('facePick');
+    const extra = document.getElementById('faceExtra');
+    // 内置
+    pick.innerHTML = builtinFaces.map(f =>
+      `<span class="${f === pickedFace ? 'active' : ''}" data-f="${f}">${f}</span>`
+    ).join('');
+    // 自定义额外
+    extra.innerHTML = extraFaces.map((f, i) => `
+      <div class="fe-item ${f === pickedFace ? 'active' : ''}" data-f="${f}" data-i="${i}">
+        ${f}
+        <div class="fe-del" data-i="${i}" title="删除表情">×</div>
+      </div>
+    `).join('');
+
+    // 选内置
+    pick.querySelectorAll('span').forEach(s => {
+      s.addEventListener('click', () => {
+        pickedFace = s.dataset.f;
+        renderFacePick();
+      });
+    });
+    // 选自定义
+    extra.querySelectorAll('.fe-item').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('fe-del')) return;
+        pickedFace = el.dataset.f;
+        renderFacePick();
+      });
+    });
+    // 删除自定义表情
+    extra.querySelectorAll('.fe-del').forEach(d => {
+      d.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const i = parseInt(d.dataset.i);
+        extraFaces.splice(i, 1);
+        saveExtraFaces();
+        // 如果删的正是当前选中的，退回默认
+        if (!allFaces().includes(pickedFace)) pickedFace = '🙂';
+        renderFacePick();
+      });
+    });
+  }
+
+  // 添加自定义表情
+  function addFace() {
+    const inp = document.getElementById('faceInput');
+    let v = inp.value.trim();
+    if (!v) return;
+    // 支持一次粘多个（按空白或逗号或直接连续 emoji 拆分）
+    // 简单处理：取第一个码位作为单个表情；如果用户粘了一串，按码位拆
+    const chars = Array.from(v);
+    let added = 0;
+    for (const ch of chars) {
+      if (ch.trim() && !allFaces().includes(ch)) {
+        extraFaces.push(ch);
+        added++;
+      }
+    }
+    if (added === 0) {
+      alert('这个表情已经有了');
+      return;
+    }
+    saveExtraFaces();
+    inp.value = '';
+    // 自动选中刚加的最后一个
+    pickedFace = extraFaces[extraFaces.length - 1];
+    renderFacePick();
+  }
+  document.getElementById('addFaceBtn').addEventListener('click', addFace);
+  document.getElementById('faceInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addFace(); }
+  });
+
+  // 关闭所有表情弹板
+  function closeAllFacePop() {
+    document.querySelectorAll('.lr-face-pop').forEach(p => p.remove());
+  }
+  document.addEventListener('click', closeAllFacePop);
+
+  // —— 分组管理 ——
+  function addGroup() {
+    const name = (prompt('新分组名字：', '新分组') || '').trim();
+    if (!name) return;
+    customGroups.push({ id: gid(), name, cards: [] });
+    curGroupId = customGroups[customGroups.length - 1].id;
+    selectedCards.clear();
+    saveCustom(); renderCustomList();
+  }
+  function renameGroup(id) {
+    const g = customGroups.find(x => x.id === id);
+    if (!g) return;
+    const name = (prompt('分组新名字：', g.name) || '').trim();
+    if (!name) return;
+    g.name = name;
+    saveCustom(); renderCustomList();
+  }
+  function deleteGroup(id) {
+    const g = customGroups.find(x => x.id === id);
+    if (!g) return;
+    if (customGroups.length <= 1) { alert('至少要保留一个分组'); return; }
+    if (!confirm(`删除分组「${g.name}」？里面的 ${g.cards.length} 句字卡也会一起删掉。`)) return;
+    customGroups = customGroups.filter(x => x.id !== id);
+    if (curGroupId === id) curGroupId = customGroups[0].id;
+    selectedCards.clear();
+    saveCustom(); buildPool(); renderCustomList();
+  }
+
+  // —— 多选相关 ——
+  function selKey(gid, idx) { return gid + ':' + idx; }
+  function refreshSelUI() {
+    const g = getCurGroup();
+    const total = g ? g.cards.length : 0;
+    const selInCur = g ? g.cards.filter((_, i) => selectedCards.has(selKey(g.id, i))).length : 0;
+    const tb = document.getElementById('selToolbar');
+    if (tb) tb.style.display = total > 0 ? 'flex' : 'none';
+    const cnt = document.getElementById('selCount');
+    if (cnt) cnt.textContent = selInCur;
+    const sa = document.getElementById('selAll');
+    if (sa) sa.checked = total > 0 && selInCur === total;
+  }
+
+  // —— 自定义字卡列表面板渲染（分组 + 多选）——
+  function renderCustomList() {
+    const list = document.getElementById('customList');
+    const bar = document.getElementById('groupBar');
+
+    // 总字数
+    const totalAll = customGroups.reduce((s, g) => s + g.cards.length, 0);
+    document.getElementById('listCount').textContent = totalAll;
+
+    // 分组标签
+    bar.innerHTML = customGroups.map(g => `
+      <div class="group-tab ${g.id === curGroupId ? 'active' : ''}" data-id="${g.id}">
+        <span class="gt-name">${g.name}</span>
+        <span class="gt-count">${g.cards.length}</span>
+        <span class="gt-act">
+          <span class="gt-ren" data-id="${g.id}" title="重命名">✎</span>
+          <span class="gt-del" data-id="${g.id}" title="删除分组">×</span>
+        </span>
+      </div>
+    `).join('') + `<button class="group-add" id="addGroupBtn" title="新建分组">＋</button>`;
+
+    bar.querySelectorAll('.group-tab').forEach(t => {
+      t.addEventListener('click', (e) => {
+        if (e.target.classList.contains('gt-ren') || e.target.classList.contains('gt-del')) return;
+        curGroupId = t.dataset.id;
+        selectedCards.clear();
+        renderCustomList();
+      });
+    });
+    bar.querySelectorAll('.gt-ren').forEach(s => {
+      s.addEventListener('click', (e) => { e.stopPropagation(); renameGroup(s.dataset.id); });
+    });
+    bar.querySelectorAll('.gt-del').forEach(s => {
+      s.addEventListener('click', (e) => { e.stopPropagation(); deleteGroup(s.dataset.id); });
+    });
+    document.getElementById('addGroupBtn').addEventListener('click', addGroup);
+
+    // 当前分组的字卡
+    const g = getCurGroup();
+    const cards = g ? g.cards : [];
+    if (cards.length === 0) {
+      list.innerHTML = '<div class="empty-tip">这个分组还没有字卡，在上面加一句试试</div>';
+      refreshSelUI();
+      return;
+    }
+
+    list.innerHTML = cards.map((c, i) => {
+      const k = selKey(g.id, i);
+      const on = selectedCards.has(k);
+      return `
+        <div class="line-row ${on ? 'sel' : ''}" data-i="${i}">
+          <input type="checkbox" class="lr-check" data-i="${i}" ${on ? 'checked' : ''}>
+          <div class="lr-face" data-i="${i}" title="点这里换表情">${c.face}</div>
+          <div class="lr-text">${c.line}</div>
+          <button class="lr-del" data-i="${i}" title="删除这句">×</button>
+        </div>
+      `;
+    }).join('');
+
+    // 多选框
+    list.querySelectorAll('.lr-check').forEach(cb => {
+      cb.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const i = parseInt(cb.dataset.i);
+        const k = selKey(g.id, i);
+        if (cb.checked) selectedCards.add(k); else selectedCards.delete(k);
+        cb.closest('.line-row').classList.toggle('sel', cb.checked);
+        refreshSelUI();
+      });
+    });
+
+    // 点表情：弹出选板
+    list.querySelectorAll('.lr-face').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllFacePop();
+        const i = parseInt(el.dataset.i);
+        const pop = document.createElement('div');
+        pop.className = 'lr-face-pop';
+        pop.innerHTML = allFaces().map(f =>
+          `<span class="${f === cards[i].face ? 'cur' : ''}" data-f="${f}">${f}</span>`
+        ).join('');
+        el.appendChild(pop);
+        pop.querySelectorAll('span').forEach(s => {
+          s.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            cards[i].face = s.dataset.f;
+            saveCustom();
+            buildPool();
+            renderCustomList();
+          });
+        });
+      });
+    });
+    // 删除单句
+    list.querySelectorAll('.lr-del').forEach(b => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const i = parseInt(b.dataset.i);
+        cards.splice(i, 1);
+        selectedCards.clear();
+        saveCustom();
+        renderCustomList();
+        buildPool();
+      });
+    });
+
+    refreshSelUI();
+  }
+
+  // 多选工具栏事件
+  document.getElementById('selAll').addEventListener('change', (e) => {
+    const g = getCurGroup();
+    if (!g) return;
+    if (e.target.checked) {
+      g.cards.forEach((_, i) => selectedCards.add(selKey(g.id, i)));
+    } else {
+      g.cards.forEach((_, i) => selectedCards.delete(selKey(g.id, i)));
+    }
+    renderCustomList();
+  });
+  document.getElementById('delSelBtn').addEventListener('click', () => {
+    const g = getCurGroup();
+    if (!g) return;
+    const idxs = [];
+    g.cards.forEach((_, i) => { if (selectedCards.has(selKey(g.id, i))) idxs.push(i); });
+    if (idxs.length === 0) return;
+    if (!confirm(`删除选中的 ${idxs.length} 句字卡？`)) return;
+    g.cards = g.cards.filter((_, i) => !selectedCards.has(selKey(g.id, i)));
+    selectedCards.clear();
+    saveCustom(); buildPool(); renderCustomList();
+  });
+
+  document.getElementById('addBtn').addEventListener('click', () => {
+    document.getElementById('overlay').classList.add('show');
+    document.getElementById('mergeToggle').checked = mergeMode;
+    renderFacePick();
+    renderCustomList();
+  });
+  document.getElementById('mergeToggle').addEventListener('change', (e) => {
+    mergeMode = e.target.checked;
+    localStorage.setItem('mergeCards', mergeMode ? '1' : '0');
+  });
+  document.getElementById('closePanel').addEventListener('click', () => {
+    document.getElementById('overlay').classList.remove('show');
+  });
+  document.getElementById('overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'overlay') document.getElementById('overlay').classList.remove('show');
+  });
+
+
+  document.getElementById('saveCard').addEventListener('click', () => {
+    const raw = document.getElementById('cline').value.trim();
+    if (!raw) {
+      alert('请填内容，一行一句');
+      return;
+    }
+    const lines = raw.split(/\n+/).map(s => s.trim()).filter(x => x);
+    if (lines.length === 0) return;
+    const g = getCurGroup();
+    if (!g) return;
+    let added = 0;
+    for (const l of lines) {
+      // 完全相同的句子不重复加（同表情，在当前分组内）
+      if (!g.cards.some(c => c.face === pickedFace && c.line === l)) {
+        g.cards.push({ face: pickedFace, line: l });
+        added++;
+      }
+    }
+    if (added === 0) {
+      alert('这些已经在字卡里了');
+      return;
+    }
+    saveCustom();
+    renderCustomList();
+    buildPool();
+    document.getElementById('cline').value = '';
+  });
+
+  // —— 状态 ——
+  let strength = 0;        // 内部连接强度（不显示）
+  let chatCount = 0;
+  let isThinking = false;
+  let lastLine = '';
+
+  try {
+    const s = JSON.parse(localStorage.getItem('channelState') || '{}');
+    if (typeof s.strength === 'number') strength = s.strength;
+    if (typeof s.chatCount === 'number') chatCount = s.chatCount;
+  } catch(e){}
+
+  function save() {
+    localStorage.setItem('channelState', JSON.stringify({ strength, chatCount }));
+  }
+
+  // —— 开场连接判定 ——
+  function tryConnect() {
+    connState = 'connecting';
+    document.getElementById('dot').className = 'dot';
+    document.getElementById('chName').textContent = '频 道 · 连 接 中';
+    document.getElementById('face').textContent = '🌀';
+    document.getElementById('ballText').textContent = '连 接 中';
+    document.getElementById('ball').classList.add('connecting');
+    document.getElementById('stage').classList.remove('off');
+    document.getElementById('input').disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+
+    setTimeout(() => {
+      const r = Math.random();
+      const bonus = Math.min(strength * 0.02, 0.3);
+      if (r < 0.55 + bonus) connState = 'on';
+      else if (r < 0.85 + bonus) connState = 'weak';
+      else connState = 'off';
+
+      applyConnState();
+
+      if (connState !== 'off') {
+        setTimeout(() => {
+          const lines = connLines[connState];
+          const line = lines[Math.floor(Math.random() * lines.length)];
+          showBubble('📡', '📡', line);
+          document.getElementById('input').disabled = false;
+          document.getElementById('sendBtn').disabled = false;
+          document.getElementById('input').focus();
+        }, 400);
+      } else {
+        document.getElementById('ballText').textContent = '点 击 重 试';
+      }
+    }, 1400 + Math.random() * 800);
+  }
+
+  function applyConnState() {
+    const dot = document.getElementById('dot');
+    const chName = document.getElementById('chName');
+    const face = document.getElementById('face');
+    const ballText = document.getElementById('ballText');
+    const ball = document.getElementById('ball');
+    const stage = document.getElementById('stage');
+
+    ball.classList.remove('connecting');
+    if (connState === 'on') {
+      dot.className = 'dot on';
+      chName.textContent = '频 道 · 已 连 接';
+      face.textContent = '🙂';
+      ballText.textContent = '在 线';
+      stage.classList.remove('off');
+    } else if (connState === 'weak') {
+      dot.className = 'dot weak';
+      chName.textContent = '频 道 · 信 号 弱';
+      face.textContent = '🌫';
+      ballText.textContent = '微 弱';
+      stage.classList.remove('off');
+    } else {
+      dot.className = 'dot off';
+      chName.textContent = '频 道 · 未 连 接';
+      face.textContent = '❌';
+      ballText.textContent = '断 开';
+      stage.classList.add('off');
+    }
+  }
+
+  // —— 气泡显示 ——
+  let typingTimer = null;
+  function showBubble(faceTag, face, line) {
+    // faceTag 显示在气泡左上角，face 是圆球上的表情
+    document.getElementById('bMood').textContent = faceTag;
+    document.getElementById('face').textContent = face;
+    const now = new Date();
+    document.getElementById('bTime').textContent =
+      now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+
+    const replyEl = document.getElementById('bReply');
+    replyEl.innerHTML = '<span class="cursor"></span>';
+    document.getElementById('bubbleWrap').classList.add('show');
+
+    let i = 0;
+    clearInterval(typingTimer);
+    typingTimer = setInterval(() => {
+      if (i <= line.length) {
+        replyEl.innerHTML = line.slice(0, i) + '<span class="cursor"></span>';
+        i++;
+      } else {
+        replyEl.innerHTML = line;
+        clearInterval(typingTimer);
+      }
+    }, 50);
+  }
+
+  function pickLine(lines) {
+    let l = lines[Math.floor(Math.random() * lines.length)];
+    if (l === lastLine && lines.length > 1) {
+      l = lines[(lines.indexOf(l) + 1) % lines.length];
+    }
+    lastLine = l;
+    return l;
+  }
+
+  // —— 聊天记录 ——
+  let chatHistory = [];
+  try {
+    chatHistory = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+    if (!Array.isArray(chatHistory)) chatHistory = [];
+  } catch(e){ chatHistory = []; }
+  function saveHistory() {
+    // 只保留最近 200 条
+    if (chatHistory.length > 200) chatHistory = chatHistory.slice(-200);
+    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+  }
+  function addHistory(from, text) {
+    chatHistory.push({ from, text, time: Date.now() });
+    saveHistory();
+  }
+  function fmtTime(ts) {
+    const d = new Date(ts);
+    return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+  }
+  function renderHistory() {
+    const list = document.getElementById('histList');
+    if (chatHistory.length === 0) {
+      list.innerHTML = '<div class="hist-empty">还没有聊天记录，去说句话吧</div>';
+      return;
+    }
+    // 按日期分组：日期变化时插入日期分隔器
+    let lastDate = '';
+    let lastFrom = '';
+    let html = '';
+    chatHistory.forEach((m, i) => {
+      const d = new Date(m.time);
+      const dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      if (dateStr !== lastDate) {
+        html += `<div class="hist-day">${dateStr}</div>`;
+        lastDate = dateStr;
+      }
+      // 同一方连续发言，第二条起不显示时间
+      const showTime = (m.from !== lastFrom);
+      html += `
+          <div class="hist-item from-${m.from}">
+            <div class="hist-bubble">${m.text}</div>
+            ${showTime ? `<div class="hist-time">${fmtTime(m.time)}</div>` : ''}
+          </div>
+        `;
+      lastFrom = m.from;
+    });
+    list.innerHTML = html;
+    list.scrollTop = list.scrollHeight;
+  }
+
+  // —— 情绪识别 ——
+  const emoRules = [
+    { emo: 'shy',   words: ['害羞','脸红','喜欢你','心动','不好意思','羞','💕','💗','❤️','亲','抱抱','粘'] },
+    { emo: 'angry', words: ['生气','吃醋','可恶','哼','讨厌','烦死','滚','可恶的系统','坏','怒'] },
+    { emo: 'happy', words: ['哈哈','开心','高兴','好事','嘿嘿','赢','醒啦','嘻嘻','😊','😄'] },
+    { emo: 'sad',   words: ['难过','伤心','哭','累','困','别熬夜','晚安','休息','😭','😴'] },
+    { emo: 'love',  words: ['想你','爱你','宝贝','宝宝','亲亲','么么','我在你身边','喜欢你粘着','我要粘着'] },
+    { emo: 'think', words: ['思考','等一下','有点难','我在努力','让我想想','🤔'] }
+  ];
+  function detectEmotion(line) {
+    for (const r of emoRules) {
+      if (r.words.some(w => line.includes(w))) return r.emo;
+    }
+    return null;
+  }
+  let emoTimer = null;
+  function applyEmotion(emo) {
+    const ball = document.getElementById('ball');
+    if (!ball) return;
+    ball.classList.remove('em-shy','em-angry','em-happy','em-sad','em-love','em-think');
+    if (!emo) return;
+    ball.classList.add('em-' + emo);
+    clearTimeout(emoTimer);
+    emoTimer = setTimeout(() => {
+      ball.classList.remove('em-shy','em-angry','em-happy','em-sad','em-love','em-think');
+    }, 4000);
+  }
+
+  // —— 语音 TTS（MiniMax T2A V2）——
+  let _ttsAudio = null;
+  function showVoiceStatus(msg, isErr) {
+    const el = document.getElementById('voiceStatus');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = isErr ? '#c44' : '#8a5a28';
+    if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 4000);
+  }
+  function speak(text) {
+    if (!set.voice.enable) return;
+    // 没东西要朗读，但要让语音对话循环继续（防止卡死在 speaking/recognizing）
+    if (!text) {
+      if (_vcActive && (_vcPhase === 'speaking' || _vcPhase === 'recognizing')) {
+        setTimeout(() => notifyTtsEnd(), 100);
+      }
+      return;
+    }
+    const v = set.voice;
+    // 必填校验，逐个指出哪个字段空
+    const missing = [];
+    if (!v.apiKey)   missing.push('API Key');
+    if (!v.groupId)  missing.push('Group ID');
+    if (!v.model)    missing.push('模型');
+    if (!v.voiceId)  missing.push('Voice ID');
+    if (missing.length) {
+      const msg = '缺：' + missing.join('、');
+      if (v.fallback) { showVoiceStatus(msg, true); speakBuiltin(text); }
+      else {
+        showVoiceStatus(msg, true);
+        // 必填字段缺失且没有 fallback，必须恢复状态，否则语音对话会卡死
+        if (_vcActive && (_vcPhase === 'speaking' || _vcPhase === 'recognizing')) {
+          setTimeout(() => notifyTtsEnd(), 100);
+        }
+      }
+      return;
+    }
+    const model = v.model;
+    const speed = Number.isFinite(v.speed) ? v.speed : 1;
+    const url = `https://api.minimaxi.com/v1/t2a_v2?GroupId=${encodeURIComponent(v.groupId)}`;
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + v.apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        text: text,
+        stream: false,
+        voice_setting: {
+          voice_id: v.voiceId,
+          speed: speed,
+          vol: 1,
+          pitch: 0
+        },
+        audio_setting: {
+          sample_rate: 32000,
+          bitrate: 128000,
+          format: 'mp3',
+          channel: 1
+        }
+      })
+    }).then(resp => {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.json();
+    }).then(j => {
+      // 错误：base_resp.status_code 非 0
+      if (!j.base_resp || j.base_resp.status_code !== 0) {
+        throw new Error(j.base_resp?.status_msg || JSON.stringify(j).slice(0, 200));
+      }
+      if (!j.data || !j.data.audio) throw new Error('返回无音频');
+      // data.audio 是 hex 编码的 mp3 字节，解码成 Uint8Array
+      const hex = j.data.audio;
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+      }
+      const blob = new Blob([bytes], { type: 'audio/mp3' });
+      if (_ttsAudio) { _ttsAudio.pause(); _ttsAudio = null; }
+      const urlObj = URL.createObjectURL(blob);
+      _ttsAudio = new Audio(urlObj);
+      notifyTtsStart();
+      _ttsAudio.play().catch(() => {
+        if (v.fallback) speakBuiltin(text);  // speakBuiltin 内部会重新调 notifyTtsStart/End
+        else notifyTtsEnd();  // 没有 fallback 必须手动结束，否则状态卡死在 speaking
+      });
+      _ttsAudio.onended = () => {
+        URL.revokeObjectURL(urlObj);
+        notifyTtsEnd();
+      };
+      // 兜底：onended 在某些浏览器/移动端可能不触发，5 秒后还没结束就强制结束
+      // （音频若比 5 秒长，notifyTtsEnd 内部会因 phase 不匹配而忽略，安全）
+      setTimeout(() => {
+        if (_vcActive && _vcPhase === 'speaking' && _ttsAudio && _ttsAudio.ended) {
+          notifyTtsEnd();
+        }
+      }, 5000);
+    }).catch(err => {
+      showVoiceStatus('TTS 失败：' + err.message, true);
+      if (v.fallback) speakBuiltin(text);
+      // fetch 失败时 _vcPhase 可能还在 'recognizing'，notifyTtsEnd 原本只处理 'speaking'
+      // 改成兜底恢复，保证循环继续
+      notifyTtsEnd();
+    });
+  }
+  function speakBuiltin(text) {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    u.rate = set.voice.rate || 1;
+    u.pitch = set.voice.pitch || 1;
+    if (set.voice.voiceName) {
+      const vv = window.speechSynthesis.getVoices().find(x => x.name === set.voice.voiceName);
+      if (vv) u.voice = vv;
+    }
+    notifyTtsStart();
+    u.onend = () => notifyTtsEnd();
+    u.onerror = () => notifyTtsEnd();
+    window.speechSynthesis.speak(u);
+  }
+
+  // —— 获取一条回复（核心回复逻辑，可被 send 或点球触发）——
+  function ballReply() {
+    if (isThinking) return;
+    isThinking = true;
+    const ball = document.getElementById('ball');
+    const ballText = document.getElementById('ballText');
+    ball.classList.add('thinking');
+    ballText.textContent = '在 想';
+
+    strength += 1;
+    chatCount += 1;
+    save();
+
+    const delay = 600 + Math.random() * 700;
+    setTimeout(() => {
+      ball.classList.remove('thinking');
+
+      let replyFace, replyLine;
+      if (connState === 'off' || (connState === 'weak' && Math.random() < 0.25)) {
+        replyFace = '❌';
+        replyLine = noreplyLines[Math.floor(Math.random() * noreplyLines.length)];
+      } else {
+        const picked = matchReply();
+        replyFace = picked.face;
+        replyLine = picked.line;
+        lastLine = replyLine;
+      }
+
+      addHistory('ball', replyLine);
+      applyEmotion(detectEmotion(replyLine));
+      showBubble(replyFace, replyFace, replyLine);
+      speak(replyLine);
+
+      applyConnState();
+      isThinking = false;
+    }, delay);
+  }
+
+  // —— 发送消息 ——
+  function send(source, directText) {
+    if (isThinking) return;
+    // directText 用于语音输入：直接传文本，不读输入框
+    let text, input;
+    if (typeof directText === 'string') {
+      text = directText.trim();
+      input = null;
+    } else {
+      input = source === 'hist'
+        ? document.getElementById('histInput')
+        : document.getElementById('input');
+      if (!input) return;
+      text = input.value.trim();
+    }
+    if (!text) return;
+
+    // voice 模式不显示"我说"小气泡（语音输入纯对话，不显示文字过程）
+    // hist 模式在聊天记录面板里直接更新列表
+    if (source !== 'hist' && source !== 'voice') {
+      const myMsg = document.getElementById('myMsg');
+      myMsg.textContent = text;
+      myMsg.classList.add('show');
+      setTimeout(() => myMsg.classList.remove('show'), 2500);
+    }
+    if (input) input.value = '';
+
+    addHistory('me', text);
+    if (typeof renderHistory === 'function') renderHistory();
+    ballReply();
+  }
+
+  // —— 事件 ——
+  document.getElementById('sendBtn').addEventListener('click', () => send());
+  document.getElementById('input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') send();
+  });
+
+  document.getElementById('stage').addEventListener('click', () => {
+    if (isThinking) return;
+    if (connState === 'off') {
+      tryConnect();
+    } else {
+      // 已连接：点球让他再说一句
+      ballReply();
+    }
+  });
+
+  document.getElementById('closeBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('bubbleWrap').classList.remove('show');
+  });
+
+  // —— 装扮设置 ——
+  const defaultSet = {
+    bg: { type: 'preset', id: 'warm', c1: '#f4ede0', c2: '#d9c8a8', url: '', file: '', beautify: true },
+    ball: {
+      c1: '#f4b870', c2: '#c89048',
+      halo: 'none',
+      decos: [],
+      text: '',
+      img: '',
+      imgMode: 'cover',
+      decoScale: 1
+    },
+    voice: {
+      enable: false,
+      apiKey: '',        // MiniMax API Key
+      groupId: '',       // MiniMax Group ID
+      model: 'speech-02-turbo',
+      voiceId: '',       // MiniMax Voice ID
+      speed: 1.0,        // 语速 0.5-2.0
+      fallback: false,  // API 失败用浏览器内置兜底
+      rate: 1, pitch: 1, voiceName: '',  // 兜底用
+      voiceInput: false  // 语音输入开关
+    }
+  };
+  let set = JSON.parse(JSON.stringify(defaultSet));
+  try {
+    const s = JSON.parse(localStorage.getItem('dressSet') || 'null');
+    if (s) {
+      set.bg = Object.assign({}, defaultSet.bg, s.bg || {});
+      set.ball = Object.assign({}, defaultSet.ball, s.ball || {});
+      set.voice = Object.assign({}, defaultSet.voice, s.voice || {});
+      // 清掉旧的简单 GET TTS 字段，统一改 MiniMax T2A 形式
+      delete set.voice.api;
+      delete set.voice.key;
+      if (!Array.isArray(set.ball.decos)) set.ball.decos = [];
+      set.ball.decos = []; // 装饰功能暂时关闭，清空已选装饰
+    }
+  } catch(e){}
+  function saveSet() { localStorage.setItem('dressSet', JSON.stringify(set)); }
+
+  // —— 图片压缩：把文件读成 base64 并缩放到指定最大尺寸 ——
+  function fileToCompressedBase64(file, maxSize = 512, quality = 0.8) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > height && width > maxSize) {
+            height = height * maxSize / width;
+            width = maxSize;
+          } else if (height > maxSize) {
+            width = width * maxSize / height;
+            height = maxSize;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(e.target.result);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // 预设背景
+  const presetBgs = [
+    { id: 'warm',     name: '暖阳',  css: 'linear-gradient(165deg,#f4ede0 0%,#ebe0cc 50%,#d9c8a8 100%)' },
+    { id: 'sakura',   name: '樱花',  css: 'linear-gradient(165deg,#fdeef0 0%,#f8d7dd 50%,#f0b8c4 100%)' },
+    { id: 'mint',     name: '薄荷',  css: 'linear-gradient(165deg,#eaf6ee 0%,#c6e8d1 50%,#a7d6b8 100%)' },
+    { id: 'sky',      name: '天空',  css: 'linear-gradient(165deg,#e6f0fa 0%,#c2d9f3 50%,#9dbfe6 100%)' },
+    { id: 'lavender', name: '薰衣草', css: 'linear-gradient(165deg,#f0ebf7 0%,#d6c8ea 50%,#b8a5d8 100%)' },
+    { id: 'peach',    name: '蜜桃',  css: 'linear-gradient(165deg,#fff0e6 0%,#ffd9c0 50%,#ffbd93 100%)' },
+    { id: 'ocean',    name: '深海',  css: 'linear-gradient(165deg,#2d3e55 0%,#3e5a78 50%,#547394 100%)' },
+    { id: 'night',    name: '星夜',  css: 'linear-gradient(165deg,#1a1a3a 0%,#2b2855 50%,#423870 100%)' }
+  ];
+  // 光环选项
+  const halos = [
+    { id: 'none',   name: '无' },
+    { id: 'soft',   name: '柔光' },
+    { id: 'strong', name: '强光' },
+    { id: 'star',   name: '星光' },
+    { id: 'mist',   name: '雾蒙蒙' }
+  ];
+  // 小球装饰
+  // type: emoji | cat-ear-l | cat-ear-r | cat-tail |
+  //       bunny-ear-l | bunny-ear-r | bear-ear-l | bear-ear-r | fox-ear-l | fox-ear-r |
+  //       antler-l | antler-r | unicorn-horn | devil-horn-l | devil-horn-r |
+  //       fox-tail | scarf | bowtie | grass | blush-l | blush-r
+  // cat: eyes 眼睛 | hair 头发 | dec 其他装饰
+  const decos = [
+    // ——— 眼睛（等你发图，先放几个示例 SVG）———
+    { key: 'eye-default', type: 'eye', icon: '👀', label: '默认大眼', cat: 'eyes',
+      svg: `<svg width="44" height="46" viewBox="0 0 44 46">
+        <defs><radialGradient id="eG" cx="50%" cy="45%" r="55%">
+          <stop offset="0%" stop-color="#fff"/><stop offset="55%" stop-color="#2b2320"/><stop offset="100%" stop-color="#000"/>
+        </radialGradient></defs>
+        <ellipse cx="22" cy="24" rx="20" ry="18" fill="#fff" stroke="#5a4028" stroke-width="1.5"/>
+        <ellipse cx="22" cy="26" rx="14" ry="14" fill="url(#eG)"/>
+        <circle cx="16" cy="20" r="4" fill="#fff" opacity=".95"/>
+        <circle cx="28" cy="22" r="2" fill="#fff" opacity=".75"/></svg>` },
+    { key: 'eye-sleepy',  type: 'eye', icon: '😴', label: '眯眼', cat: 'eyes',
+      svg: `<svg width="44" height="36" viewBox="0 0 44 36">
+        <path d="M2 18 C12 6, 32 6, 42 18" stroke="#3a2b1a" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M6 24 C14 20, 30 20, 38 24" stroke="#a07a50" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".6"/>
+        <circle cx="10" cy="17" r="1.5" fill="#3a2b1a"/><circle cx="34" cy="17" r="1.5" fill="#3a2b1a"/></svg>` },
+    { key: 'eye-wink',    type: 'eye', icon: '😉', label: '眨眼', cat: 'eyes',
+      leftSvg: `<svg width="44" height="46" viewBox="0 0 44 46">
+        <defs><radialGradient id="ewG" cx="50%" cy="45%" r="55%">
+          <stop offset="0%" stop-color="#fff"/><stop offset="55%" stop-color="#2b2320"/><stop offset="100%" stop-color="#000"/>
+        </radialGradient></defs>
+        <ellipse cx="22" cy="24" rx="20" ry="18" fill="#fff" stroke="#5a4028" stroke-width="1.5"/>
+        <ellipse cx="22" cy="26" rx="14" ry="14" fill="url(#ewG)"/>
+        <circle cx="16" cy="20" r="4" fill="#fff" opacity=".95"/></svg>`,
+      rightSvg: `<svg width="44" height="30" viewBox="0 0 44 30">
+        <path d="M2 15 C14 3, 30 3, 42 15" stroke="#3a2b1a" stroke-width="3" fill="none" stroke-linecap="round"/></svg>` },
+
+    // ——— 头发（等你发图，先放几个示例 SVG）———
+    { key: 'hair-bangs',   type: 'hair', icon: '💇', label: '齐刘海', cat: 'hair',
+      svg: `<svg width="220" height="120" viewBox="0 0 220 120">
+        <defs><linearGradient id="hG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#3a2b1a"/><stop offset="100%" stop-color="#1f1410"/>
+        </linearGradient></defs>
+        <path d="M10 90 C10 40, 60 0, 110 0 C160 0, 210 40, 210 90 C180 70, 140 78, 110 92 C80 78, 40 70, 10 90 Z"
+              fill="url(#hG)"/>
+        <path d="M40 92 C48 70, 60 58, 90 62 C78 74, 64 88, 56 100 Z" fill="#2a1e14" opacity=".6"/>
+        <path d="M130 62 C160 58, 172 70, 180 92 C156 88, 142 74, 130 62 Z" fill="#2a1e14" opacity=".6"/>
+      </svg>` },
+    { key: 'hair-curl',    type: 'hair', icon: '👩‍🦱', label: '卷发', cat: 'hair',
+      svg: `<svg width="220" height="130" viewBox="0 0 220 130">
+        <defs><radialGradient id="hG2" cx="50%" cy="20%" r="70%">
+          <stop offset="0%" stop-color="#8b5a2b"/><stop offset="100%" stop-color="#5a3810"/>
+        </radialGradient></defs>
+        <g fill="url(#hG2)">
+          <ellipse cx="30" cy="70" rx="30" ry="40"/>
+          <ellipse cx="70" cy="40" rx="32" ry="38"/>
+          <ellipse cx="110" cy="28" rx="36" ry="36"/>
+          <ellipse cx="150" cy="40" rx="32" ry="38"/>
+          <ellipse cx="190" cy="70" rx="30" ry="40"/>
+          <ellipse cx="18" cy="110" rx="22" ry="22"/>
+          <ellipse cx="202" cy="110" rx="22" ry="22"/>
+        </g>
+      </svg>` },
+    { key: 'hair-bob',     type: 'hair', icon: '💁', label: '波波头', cat: 'hair',
+      svg: `<svg width="220" height="140" viewBox="0 0 220 140">
+        <defs><linearGradient id="hG3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1a1210"/><stop offset="100%" stop-color="#3a2b1e"/>
+        </linearGradient></defs>
+        <path d="M12 40 C20 8, 70 0, 110 0 C150 0, 200 8, 208 40 C212 90, 200 130, 190 132 L180 132 C182 100, 175 70, 110 70 C45 70, 38 100, 40 132 L30 132 C20 130, 8 90, 12 40 Z"
+              fill="url(#hG3)"/>
+      </svg>` },
+
+    // ——— 其他装饰 ———
+    // 头顶部
+    { key: 'crown',       type: 'emoji',       icon: '👑', pos: { top: '-14%', left: '50%' },  size: 28, cat: 'dec' },
+    { key: 'hat',         type: 'emoji',       icon: '🎩', pos: { top: '-12%', left: '50%' },  size: 28, cat: 'dec' },
+    { key: 'cap',         type: 'emoji',       icon: '🧢', pos: { top: '-12%', left: '50%' },  size: 28, cat: 'dec' },
+    { key: 'halo',        type: 'emoji',       icon: '✨', pos: { top: '-22%', left: '50%' },  size: 26, cat: 'dec' },
+    { key: 'unicornHorn', type: 'unicorn-horn',icon: '🦄', label: '独角兽角', cat: 'dec' },
+    { key: 'cloud',       type: 'emoji',       icon: '☁️',  pos: { top: '-24%', left: '30%' }, size: 20, cat: 'dec' },
+    // 耳朵
+    { key: 'catEarL',     type: 'cat-ear-l',   icon: '🐾', label: '猫耳（左）', cat: 'dec' },
+    { key: 'catEarR',     type: 'cat-ear-r',   icon: '🐾', label: '猫耳（右）', cat: 'dec' },
+    { key: 'bunnyEarL',   type: 'bunny-ear-l', icon: '🐰', label: '兔耳（左）', cat: 'dec' },
+    { key: 'bunnyEarR',   type: 'bunny-ear-r', icon: '🐰', label: '兔耳（右）', cat: 'dec' },
+    { key: 'bearEarL',    type: 'bear-ear-l',  icon: '🐻', label: '熊耳（左）', cat: 'dec' },
+    { key: 'bearEarR',    type: 'bear-ear-r',  icon: '🐻', label: '熊耳（右）', cat: 'dec' },
+    { key: 'foxEarL',     type: 'fox-ear-l',   icon: '🦊', label: '狐狸耳（左）', cat: 'dec' },
+    { key: 'foxEarR',     type: 'fox-ear-r',   icon: '🦊', label: '狐狸耳（右）', cat: 'dec' },
+    { key: 'antlerL',     type: 'antler-l',    icon: '🦌', label: '麋鹿角（左）', cat: 'dec' },
+    { key: 'antlerR',     type: 'antler-r',    icon: '🦌', label: '麋鹿角（右）', cat: 'dec' },
+    { key: 'devilHornL',  type: 'devil-horn-l',icon: '👿', label: '恶魔角（左）', cat: 'dec' },
+    { key: 'devilHornR',  type: 'devil-horn-r',icon: '👿', label: '恶魔角（右）', cat: 'dec' },
+    // 脸颊
+    { key: 'ribbon',      type: 'emoji',       icon: '🎀', pos: { top: '0%',   left: '8%' },   size: 22, cat: 'dec' },
+    { key: 'flower',      type: 'emoji',       icon: '🌸', pos: { top: '-8%',  left: '18%' },  size: 22, cat: 'dec' },
+    { key: 'bell',        type: 'emoji',       icon: '🔔', pos: { top: '15%',  left: '12%' },  size: 20, cat: 'dec' },
+    { key: 'star',        type: 'emoji',       icon: '⭐', pos: { top: '-6%',  left: '82%' },  size: 22, cat: 'dec' },
+    { key: 'heart',       type: 'emoji',       icon: '💖', pos: { top: '8%',   left: '88%' },  size: 22, cat: 'dec' },
+    { key: 'blushL',      type: 'blush-l',     icon: '😊', label: '腮红（左）', cat: 'dec' },
+    { key: 'blushR',      type: 'blush-r',     icon: '😊', label: '腮红（右）', cat: 'dec' },
+    // 身体/尾部
+    { key: 'wingL',       type: 'emoji',       icon: '🪽', pos: { top: '45%',  left: '-12%' }, size: 30, rot: -25, cat: 'dec' },
+    { key: 'wingR',       type: 'emoji',       icon: '🪽', pos: { top: '45%',  left: '112%' },size: 30, rot: 25, cat: 'dec' },
+    { key: 'scarf',       type: 'scarf',       icon: '🧣', label: '围巾', cat: 'dec' },
+    { key: 'bowtie',      type: 'bowtie',      icon: '🎀', label: '蝴蝶结', cat: 'dec' },
+    { key: 'catTail',     type: 'cat-tail',    icon: '🐾', label: '猫尾巴', cat: 'dec' },
+    { key: 'foxTail',     type: 'fox-tail',    icon: '🦊', label: '狐狸尾巴', cat: 'dec' },
+    { key: 'grass',       type: 'grass',       icon: '🌿', label: '小草', cat: 'dec' }
+  ];
+
+  // 当前装扮 Tab
+  let decoCat = 'eyes';
+
+  // —— 应用背景 ——
+  function applyBg() {
+    const body = document.body;
+    let css = '';
+    if (set.bg.type === 'file' && set.bg.file) {
+      css = `url("${set.bg.file}") center/cover no-repeat fixed`;
+    } else if (set.bg.type === 'url' && set.bg.url) {
+      css = `url("${set.bg.url}") center/cover no-repeat fixed, linear-gradient(165deg,${set.bg.c1},${set.bg.c2})`;
+    } else if (set.bg.type === 'color') {
+      css = `linear-gradient(165deg,${set.bg.c1} 0%,${set.bg.c2} 100%)`;
+    } else {
+      const p = presetBgs.find(b => b.id === set.bg.id) || presetBgs[0];
+      css = p.css;
+    }
+    body.style.background = css;
+    // 美化总开关
+    body.classList.toggle('no-beautify', !set.bg.beautify);
+    // 深背景时把顶部/输入框文字调浅色
+    const darkBgs = ['ocean','night'];
+    const isDark = set.bg.type === 'preset' && darkBgs.includes(set.bg.id);
+    document.documentElement.style.setProperty('--txt', isDark ? '#f4ede0' : '#4a3c28');
+  }
+
+  // —— 独立的装饰渲染函数（外部可随时调用）——
+  function renderDecos() {
+    const ball = document.getElementById('ball');
+    if (!ball) return;
+    ball.querySelectorAll('.ball-deco, .cat-ear, .cat-tail, .bunny-ear, .bear-ear, .fox-ear, .antler, .unicorn-horn, .devil-horn, .fox-tail, .scarf, .bowtie, .grass, .blush, .ball-eye, .ball-hair').forEach(n => n.remove());
+    const imgMode = !!set.ball.img;
+    const _c1 = imgMode ? 'rgba(255,255,255,0.55)' : set.ball.c1;
+    const _c2 = imgMode ? 'rgba(255,255,255,0.25)' : set.ball.c2;
+    const _st = imgMode ? 'rgba(120,90,60,0.5)' : set.ball.c2;
+    const _fc1 = imgMode ? 'rgba(255,220,180,0.55)' : '#f4a868';
+    const _fc2 = imgMode ? 'rgba(255,200,150,0.25)' : '#d07c3a';
+    const _fst = imgMode ? 'rgba(120,90,60,0.5)' : '#a05a1a';
+    const _ac1 = imgMode ? 'rgba(200,170,130,0.7)' : '#8c6a44';
+    const _ac2 = imgMode ? 'rgba(180,150,110,0.45)' : '#6a4a28';
+    const _dc1 = imgMode ? 'rgba(80,40,50,0.7)' : '#3a2a3a';
+    const _dc2 = imgMode ? 'rgba(180,60,80,0.55)' : '#8a2a3a';
+    const _dst = imgMode ? 'rgba(80,30,40,0.6)' : '#2a1a2a';
+    const _uc1 = '#fff';
+    const _uc2 = '#ffd6e0';
+    const _ust = '#c08aa0';
+
+    const mkEar = (cls, side, svgFn) => {
+      const el = document.createElement('div');
+      el.className = `${cls} ${side}`;
+      el.innerHTML = svgFn(side);
+      ball.appendChild(el);
+    };
+    const mkSingle = (cls, inner, css) => {
+      const el = document.createElement('div');
+      el.className = cls;
+      el.innerHTML = inner;
+      if (css) el.style.cssText = css;
+      ball.appendChild(el);
+    };
+    const mkPair = (cls, side, inner) => {
+      const el = document.createElement('div');
+      el.className = `${cls} ${side}`;
+      el.innerHTML = inner;
+      ball.appendChild(el);
+    };
+
+    for (const k of set.ball.decos) {
+      const d = decos.find(x => x.key === k);
+      if (!d) continue;
+
+      if (d.type === 'cat-ear-l') mkEar('cat-ear', 'left', () => `
+        <svg width="38" height="42" viewBox="0 0 38 42"><defs>
+          <linearGradient id="Gcel" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_c1}"/><stop offset="100%" stop-color="${_c2}"/>
+          </linearGradient></defs>
+          <path d="M19 4 L34 38 L4 38 Z" fill="url(#Gcel)" stroke="${_st}" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M19 12 L28 34 L10 34 Z" fill="rgba(255,200,200,0.45)"/></svg>`);
+      else if (d.type === 'cat-ear-r') mkEar('cat-ear', 'right', () => `
+        <svg width="38" height="42" viewBox="0 0 38 42"><defs>
+          <linearGradient id="Gcer" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_c1}"/><stop offset="100%" stop-color="${_c2}"/>
+          </linearGradient></defs>
+          <path d="M19 4 L34 38 L4 38 Z" fill="url(#Gcer)" stroke="${_st}" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M19 12 L28 34 L10 34 Z" fill="rgba(255,200,200,0.45)"/></svg>`);
+      else if (d.type === 'bunny-ear-l') mkEar('bunny-ear', 'left', () => `
+        <svg width="26" height="72" viewBox="0 0 26 72"><defs>
+          <linearGradient id="Gbel" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_c1}"/><stop offset="100%" stop-color="${_c2}"/>
+          </linearGradient></defs>
+          <path d="M13 4 C22 10, 24 40, 20 64 C17 72, 9 72, 6 64 C2 40, 4 10, 13 4 Z"
+                fill="url(#Gbel)" stroke="${_st}" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M13 18 C17 22, 18 48, 15 62 C13 66, 11 66, 11 62 C10 48, 9 22, 13 18 Z"
+                fill="rgba(255,200,200,0.55)"/></svg>`);
+      else if (d.type === 'bunny-ear-r') mkEar('bunny-ear', 'right', () => `
+        <svg width="26" height="72" viewBox="0 0 26 72"><defs>
+          <linearGradient id="Gber" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_c1}"/><stop offset="100%" stop-color="${_c2}"/>
+          </linearGradient></defs>
+          <path d="M13 4 C22 10, 24 40, 20 64 C17 72, 9 72, 6 64 C2 40, 4 10, 13 4 Z"
+                fill="url(#Gber)" stroke="${_st}" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M13 18 C17 22, 18 48, 15 62 C13 66, 11 66, 11 62 C10 48, 9 22, 13 18 Z"
+                fill="rgba(255,200,200,0.55)"/></svg>`);
+      else if (d.type === 'bear-ear-l') mkEar('bear-ear', 'left', () => `
+        <svg width="36" height="36" viewBox="0 0 36 36"><defs>
+          <radialGradient id="Gbel" cx="50%" cy="55%" r="60%">
+            <stop offset="0%" stop-color="${_c1}"/><stop offset="100%" stop-color="${_c2}"/>
+          </radialGradient></defs>
+          <circle cx="18" cy="18" r="16" fill="url(#Gbel)" stroke="${_st}" stroke-width="1.5"/>
+          <circle cx="18" cy="20" r="9" fill="rgba(255,200,200,0.45)"/></svg>`);
+      else if (d.type === 'bear-ear-r') mkEar('bear-ear', 'right', () => `
+        <svg width="36" height="36" viewBox="0 0 36 36"><defs>
+          <radialGradient id="Gber" cx="50%" cy="55%" r="60%">
+            <stop offset="0%" stop-color="${_c1}"/><stop offset="100%" stop-color="${_c2}"/>
+          </radialGradient></defs>
+          <circle cx="18" cy="18" r="16" fill="url(#Gber)" stroke="${_st}" stroke-width="1.5"/>
+          <circle cx="18" cy="20" r="9" fill="rgba(255,200,200,0.45)"/></svg>`);
+      else if (d.type === 'fox-ear-l') mkEar('fox-ear', 'left', () => `
+        <svg width="32" height="40" viewBox="0 0 32 40"><defs>
+          <linearGradient id="Gfel" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_fc1}"/><stop offset="100%" stop-color="${_fc2}"/>
+          </linearGradient></defs>
+          <path d="M16 3 L30 36 L2 36 Z" fill="url(#Gfel)" stroke="${_fst}" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M16 12 L25 33 L7 33 Z" fill="rgba(30,20,20,0.75)"/></svg>`);
+      else if (d.type === 'fox-ear-r') mkEar('fox-ear', 'right', () => `
+        <svg width="32" height="40" viewBox="0 0 32 40"><defs>
+          <linearGradient id="Gfer" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_fc1}"/><stop offset="100%" stop-color="${_fc2}"/>
+          </linearGradient></defs>
+          <path d="M16 3 L30 36 L2 36 Z" fill="url(#Gfer)" stroke="${_fst}" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M16 12 L25 33 L7 33 Z" fill="rgba(30,20,20,0.75)"/></svg>`);
+      else if (d.type === 'antler-l') mkEar('antler', 'left', () => `
+        <svg width="52" height="84" viewBox="0 0 52 84"><defs>
+          <linearGradient id="Gal" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_ac1}"/><stop offset="100%" stop-color="${_ac2}"/>
+          </linearGradient></defs>
+          <g stroke="${_ac2}" stroke-width="5" stroke-linecap="round" fill="none">
+            <path d="M40 82 C38 60, 34 44, 30 26 M30 26 L18 14 M30 26 L42 10 M34 44 L22 38 M36 58 L24 52"
+                  stroke="url(#Gal)"/></g></svg>`);
+      else if (d.type === 'antler-r') mkEar('antler', 'right', () => `
+        <svg width="52" height="84" viewBox="0 0 52 84"><defs>
+          <linearGradient id="Gar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_ac1}"/><stop offset="100%" stop-color="${_ac2}"/>
+          </linearGradient></defs>
+          <g stroke="${_ac2}" stroke-width="5" stroke-linecap="round" fill="none">
+            <path d="M12 82 C14 60, 18 44, 22 26 M22 26 L34 14 M22 26 L10 10 M18 44 L30 38 M16 58 L28 52"
+                  stroke="url(#Gar)"/></g></svg>`);
+      else if (d.type === 'unicorn-horn') mkSingle('unicorn-horn', `
+        <svg width="26" height="64" viewBox="0 0 26 64"><defs>
+          <linearGradient id="Gu" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="${_uc1}"/>
+            <stop offset="40%" stop-color="#fdd6e8"/>
+            <stop offset="70%" stop-color="#d6e8ff"/>
+            <stop offset="100%" stop-color="${_uc2}"/>
+          </linearGradient></defs>
+          <path d="M13 2 C19 18, 19 40, 24 62 C18 58, 8 58, 2 62 C7 40, 7 18, 13 2 Z"
+                fill="url(#Gu)" stroke="${_ust}" stroke-width="1" stroke-linejoin="round"/>
+          <path d="M5 18 L21 18 M3 30 L23 30 M4 44 L22 44" stroke="rgba(120,80,120,0.3)" stroke-width="1" fill="none"/>
+        </svg>`);
+      else if (d.type === 'devil-horn-l') mkEar('devil-horn', 'left', () => `
+        <svg width="30" height="44" viewBox="0 0 30 44"><defs>
+          <linearGradient id="Gdl" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_dc1}"/><stop offset="100%" stop-color="${_dc2}"/>
+          </linearGradient></defs>
+          <path d="M14 2 C22 10, 26 28, 22 42 L8 42 C4 28, 6 10, 14 2 Z"
+                fill="url(#Gdl)" stroke="${_dst}" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M12 8 C16 14, 18 28, 16 38" stroke="${_dst}" stroke-width="1.5" fill="none" opacity=".5"/>
+        </svg>`);
+      else if (d.type === 'devil-horn-r') mkEar('devil-horn', 'right', () => `
+        <svg width="30" height="44" viewBox="0 0 30 44"><defs>
+          <linearGradient id="Gdr" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${_dc1}"/><stop offset="100%" stop-color="${_dc2}"/>
+          </linearGradient></defs>
+          <path d="M16 2 C24 10, 26 28, 22 42 L8 42 C4 28, 6 10, 16 2 Z"
+                fill="url(#Gdr)" stroke="${_dst}" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M18 8 C14 14, 12 28, 14 38" stroke="${_dst}" stroke-width="1.5" fill="none" opacity=".5"/>
+        </svg>`);
+      else if (d.type === 'cat-tail') mkSingle('cat-tail', `
+        <svg viewBox="0 0 60 80"><defs>
+          <linearGradient id="Gct" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="${_c1}"/><stop offset="100%" stop-color="${_c2}"/>
+          </linearGradient></defs>
+          <path d="M5 5 C20 5, 45 20, 50 45 C52 58, 40 72, 25 72 C12 72, 5 60, 5 50 Z"
+                fill="url(#Gct)" stroke="${_st}" stroke-width="1.5" stroke-linejoin="round"/></svg>`);
+      else if (d.type === 'fox-tail') mkSingle('fox-tail', `
+        <svg viewBox="0 0 70 96"><defs>
+          <linearGradient id="Gft" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="${_fc1}"/><stop offset="100%" stop-color="${_fc2}"/>
+          </linearGradient></defs>
+          <path d="M6 8 C20 4, 40 14, 54 34 C66 52, 62 80, 44 92 C26 94, 12 82, 8 68 C4 52, 0 22, 6 8 Z"
+                fill="url(#Gft)" stroke="${_fst}" stroke-width="1.5" stroke-linejoin="round"/>
+          <ellipse cx="48" cy="84" rx="14" ry="10" fill="#fff" opacity=".85"/>
+        </svg>`);
+      else if (d.type === 'scarf') mkSingle('scarf', `
+        <svg viewBox="0 0 200 60" preserveAspectRatio="none" style="width:100%;height:100%;">
+          <defs>
+            <linearGradient id="Gs" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ff9aa2"/><stop offset="50%" stop-color="#ff5e7a"/>
+              <stop offset="100%" stop-color="#d03a5a"/>
+            </linearGradient>
+            <pattern id="sp" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+              <path d="M7 2 L9 6 L13 7 L9 8 L7 12 L5 8 L1 7 L5 6 Z" fill="rgba(255,255,255,.7)"/>
+            </pattern>
+          </defs>
+          <path d="M0 20 C50 0, 150 0, 200 20 L200 42 C150 58, 50 58, 0 42 Z" fill="url(#Gs)"/>
+          <path d="M0 20 C50 0, 150 0, 200 20 L200 42 C150 58, 50 58, 0 42 Z" fill="url(#sp)" opacity=".55"/>
+          <path d="M160 42 C170 62, 180 80, 190 100" stroke="url(#Gs)" stroke-width="14" fill="none" stroke-linecap="round" transform="translate(0,-40) scale(.6)"/>
+        </svg>`);
+      else if (d.type === 'bowtie') mkSingle('bowtie', `
+        <svg width="52" height="32" viewBox="0 0 52 32"><defs>
+          <linearGradient id="Gb" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#ff6a8a"/><stop offset="100%" stop-color="#b82a5a"/>
+          </linearGradient></defs>
+          <path d="M26 16 L2 4 L2 28 Z" fill="url(#Gb)"/>
+          <path d="M26 16 L50 4 L50 28 Z" fill="url(#Gb)"/>
+          <rect x="22" y="12" width="8" height="8" rx="2" fill="#fff2c8" stroke="#d88040" stroke-width="1"/>
+        </svg>`);
+      else if (d.type === 'grass') mkSingle('grass', `
+        <svg width="44" height="30" viewBox="0 0 44 30">
+          <path d="M4 28 C10 18, 6 10, 10 2 L12 28 Z" fill="#5a9a4a"/>
+          <path d="M14 28 C20 14, 16 6, 22 0 L24 28 Z" fill="#6aaa58"/>
+          <path d="M26 28 C32 16, 28 8, 34 4 L36 28 Z" fill="#5a9a4a"/>
+          <path d="M38 28 C42 20, 40 12, 42 8 L44 28 Z" fill="#4a8a3a"/>
+        </svg>`);
+      else if (d.type === 'blush-l') mkPair('blush', 'left', '');
+      else if (d.type === 'blush-r') mkPair('blush', 'right', '');
+      else if (d.type === 'eye') {
+        // 眼睛：左右各一个，居中分布在 30%/70% 位置
+        mkSingle('ball-eye', d.svg || d.leftSvg, `left:30%;top:42%;transform:translate(-50%,-50%) scale(var(--deco-scale,1));`);
+        mkSingle('ball-eye', d.svg || d.rightSvg || d.svg, `left:70%;top:42%;transform:translate(-50%,-50%) scale(var(--deco-scale,1));`);
+      }
+      else if (d.type === 'hair') {
+        mkSingle('ball-hair', d.svg || '', `left:50%;top:22%;transform:translate(-50%,-50%) scale(var(--deco-scale,1));`);
+      }
+      else {
+        // emoji
+        const el = document.createElement('div');
+        el.className = 'ball-deco';
+        el.textContent = d.icon;
+        el.style.top = d.pos.top;
+        el.style.left = d.pos.left;
+        el.style.fontSize = d.size + 'px';
+        const rot = d.rot || 0;
+        el.style.transform = `translate(-50%, -50%) rotate(${rot}deg) scale(var(--deco-scale, 1))`;
+        ball.appendChild(el);
+      }
+    }
+  }
+
+  // —— 应用小球装扮 ——
+  function applyBall() {
+    const stage = document.getElementById('stage');
+    const ball = document.getElementById('ball');
+    const face = document.getElementById('face');
+    const ballText = document.getElementById('ballText');
+
+    ball.classList.remove('img-mode', 'cover-mode', 'contain-mode');
+    ball.querySelectorAll('.ball-img').forEach(n => n.remove());
+    ball.style.setProperty('--ball-img', 'none');
+
+    if (set.ball.img) {
+      // 图片模式：cover 刚好贴满圆球
+      ball.classList.add('img-mode', 'cover-mode');
+      ball.style.setProperty('--ball-img', `url("${set.ball.img}")`);
+      ball.style.background = 'none';
+      ball.style.boxShadow =
+        `0 14px 34px -10px rgba(0,0,0,.45), ` +
+        `0 0 0 3px rgba(255,255,255,.9), ` +
+        `inset 0 0 0 2px rgba(0,0,0,.15)`;
+    } else {
+      ball.style.background =
+        `radial-gradient(circle at 32% 28%, rgba(255,255,255,.65) 0%, ${set.ball.c1} 42%, ${set.ball.c2} 100%)`;
+      ball.style.boxShadow =
+        `inset -8px -10px 18px rgba(0,0,0,.1), ` +
+        `inset 6px 6px 14px rgba(255,255,255,.45), ` +
+        `0 10px 30px -8px rgba(0,0,0,.3)`;
+    }
+
+    const bp = document.getElementById('bpBall');
+    if (bp) {
+      bp.classList.remove('img-mode', 'cover-mode', 'contain-mode');
+      bp.style.setProperty('--ball-img', 'none');
+      if (set.ball.img) {
+        bp.classList.add('img-mode', 'cover-mode');
+        bp.style.setProperty('--ball-img', `url("${set.ball.img}")`);
+        bp.style.background = 'none';
+        bp.style.boxShadow = `0 4px 12px -4px rgba(0,0,0,.4), 0 0 0 2px rgba(255,255,255,.9), inset 0 0 0 1px rgba(0,0,0,.15)`;
+      } else {
+        bp.style.background = ball.style.background;
+        bp.style.boxShadow = `inset -4px -5px 10px rgba(0,0,0,.1), inset 3px 3px 8px rgba(255,255,255,.45), 0 3px 10px -2px rgba(180,120,40,.35)`;
+      }
+    }
+
+    // 光环：插在 stage 里
+    stage.querySelectorAll('.halo').forEach(n => n.remove());
+    ball.classList.remove('halo-mist');
+    const makeHalo = (size, color, blur, delay) => {
+      const h = document.createElement('div');
+      h.className = 'halo';
+      h.style.cssText = `
+        width:${size}px; height:${size}px;
+        border:2px solid ${color};
+        box-shadow: 0 0 ${blur}px ${color};
+        opacity: .5;
+        animation: haloPulse 2.6s ease-in-out ${delay}s infinite;
+      `;
+      stage.appendChild(h);
+    };
+    if (!document.getElementById('haloAnimStyle')) {
+      const st = document.createElement('style');
+      st.id = 'haloAnimStyle';
+      st.textContent = `
+        @keyframes haloPulse {
+          0%,100% { transform: translate(-50%,-50%) scale(.95); opacity: .35; }
+          50%     { transform: translate(-50%,-50%) scale(1.1);  opacity: .85; }
+        }`;
+      document.head.appendChild(st);
+    }
+    if (set.ball.halo === 'soft') {
+      makeHalo(140, 'rgba(244,184,112,.5)', 6, 0);
+      makeHalo(170, 'rgba(244,184,112,.35)', 10, .4);
+    } else if (set.ball.halo === 'strong') {
+      makeHalo(150, 'rgba(255,230,160,.7)', 10, 0);
+      makeHalo(190, 'rgba(255,200,120,.5)', 16, .3);
+      makeHalo(230, 'rgba(255,180,90,.3)', 22, .6);
+    } else if (set.ball.halo === 'star') {
+      makeHalo(160, 'rgba(200,210,255,.6)', 8, 0);
+      makeHalo(200, 'rgba(170,180,255,.45)', 14, .5);
+    } else if (set.ball.halo === 'mist') {
+      // 雾蒙蒙：球体自身虚化 + 柔光晕染（Claude 那种高级感）
+      ball.classList.add('halo-mist');
+      const glow = document.createElement('div');
+      glow.className = 'halo mist-glow';
+      stage.appendChild(glow);
+    }
+    if (!document.getElementById('mistAnimStyle')) {
+      const st = document.createElement('style');
+      st.id = 'mistAnimStyle';
+      st.textContent = `
+        .ball.halo-mist {
+          filter: blur(1.6px) drop-shadow(0 0 14px rgba(255,240,220,.55));
+        }
+        .mist-glow {
+          width: 220px; height: 220px;
+          background: radial-gradient(circle,
+            rgba(255,240,220,.45) 0%,
+            rgba(244,184,112,.22) 38%,
+            transparent 72%);
+          filter: blur(16px);
+          opacity: .85;
+          animation: mistBreath 5s ease-in-out infinite;
+        }
+        @keyframes mistBreath {
+          0%,100% { transform: translate(-50%,-50%) scale(1);    opacity: .55; }
+          50%     { transform: translate(-50%,-50%) scale(1.12); opacity:  .9; }
+        }`;
+      document.head.appendChild(st);
+    }
+
+    // 装饰
+    renderDecos();
+
+    // 小球上自定义文字
+    let tx = stage.querySelector('.ball-txt');
+    if (set.ball.text) {
+      if (!tx) {
+        tx = document.createElement('div');
+        tx.className = 'ball-txt';
+        stage.appendChild(tx);
+      }
+      tx.textContent = set.ball.text;
+    } else if (tx) {
+      tx.remove();
+    }
+
+    // 更新面板预览
+    if (bp) {
+      bp.style.background = ball.style.background;
+      bp.style.boxShadow = `inset -4px -5px 10px rgba(0,0,0,.1), inset 3px 3px 8px rgba(255,255,255,.45), 0 3px 10px -2px rgba(180,120,40,.35)`;
+    }
+  }
+
+  // —— 渲染设置面板 UI ——
+  function renderSetPanel() {
+    // 预设背景
+    const g = document.getElementById('bgGrid');
+    g.innerHTML = presetBgs.map(b => `
+      <div class="bg-card ${set.bg.type==='preset' && set.bg.id===b.id ? 'on' : ''}"
+           data-id="${b.id}" title="${b.name}" style="background:${b.css}"></div>
+    `).join('');
+    g.querySelectorAll('.bg-card').forEach(c => {
+      c.addEventListener('click', () => {
+        set.bg.type = 'preset';
+        set.bg.id = c.dataset.id;
+        saveSet(); applyBg(); renderSetPanel();
+      });
+    });
+
+    // 颜色输入值
+    document.getElementById('c1').value = set.bg.c1;
+    document.getElementById('c2').value = set.bg.c2;
+    document.getElementById('bgUrl').value = set.bg.url || '';
+    // 背景：有上传图就显示"移除"
+    document.getElementById('bgClearBtn').style.display = set.bg.file ? '' : 'none';
+    // 美化开关同步
+    const bt = document.getElementById('beautifyToggle');
+    if (bt) {
+      bt.checked = set.bg.beautify !== false;
+      document.getElementById('beautifyState').textContent = bt.checked ? '开' : '关';
+    }
+
+    // 小球颜色
+    document.getElementById('bc1').value = set.ball.c1;
+    document.getElementById('bc2').value = set.ball.c2;
+    document.getElementById('ballTxt').value = set.ball.text || '';
+    // 小球：有图片就显示"换回球"
+    const hasImg = !!set.ball.img;
+    document.getElementById('ballImgClear').style.display = hasImg ? '' : 'none';
+    document.getElementById('ballColorField').style.opacity = hasImg ? 0.4 : 1;
+    document.getElementById('ballColorField').style.pointerEvents = hasImg ? 'none' : 'auto';
+
+    // 语音设置
+    document.getElementById('voiceEnable').checked = !!set.voice.enable;
+    document.getElementById('voiceEnableState').textContent = set.voice.enable ? '开' : '关';
+    document.getElementById('ttsApiKey').value = set.voice.apiKey || '';
+    document.getElementById('ttsGroupId').value = set.voice.groupId || '';
+    document.getElementById('ttsModel').value = set.voice.model || 'speech-02-turbo';
+    document.getElementById('ttsVoiceId').value = set.voice.voiceId || '';
+    const sp = Number.isFinite(set.voice.speed) ? set.voice.speed : 1;
+    document.getElementById('ttsSpeed').value = sp;
+    document.getElementById('ttsSpeedVal').textContent = sp.toFixed(2);
+    document.getElementById('voiceFallback').checked = !!set.voice.fallback;
+    document.getElementById('voiceFallbackState').textContent = set.voice.fallback ? '开' : '关';
+    // 语音对话模式开关
+    const vIn = !!set.voice.voiceInput;
+    document.getElementById('voiceInputEnable').checked = vIn;
+    document.getElementById('voiceInputState').textContent = vIn ? '开' : '关';
+
+    // 光环
+    const ho = document.getElementById('haloOpts');
+    ho.innerHTML = halos.map(h =>
+      `<button class="opt-chip ${set.ball.halo===h.id?'on':''}" data-id="${h.id}">${h.name}</button>`
+    ).join('');
+    ho.querySelectorAll('.opt-chip').forEach(b => {
+      b.addEventListener('click', () => {
+        set.ball.halo = b.dataset.id;
+        saveSet(); applyBall(); renderSetPanel();
+      });
+    });
+  }
+
+  // —— 设置面板事件 ——
+  document.getElementById('setBtn').addEventListener('click', () => {
+    renderSetPanel();
+    applyBall(); // 刷新预览
+    document.getElementById('setOverlay').classList.add('show');
+  });
+  document.getElementById('closeSet').addEventListener('click', () => {
+    document.getElementById('setOverlay').classList.remove('show');
+  });
+  document.getElementById('setOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'setOverlay') document.getElementById('setOverlay').classList.remove('show');
+  });
+
+  // 聊天记录独立全屏页面：用 body.chat-mode 切换，彻底跟主界面分离
+  document.getElementById('histBtn').addEventListener('click', () => {
+    renderHistory();
+    document.body.classList.add('chat-mode');
+  });
+  document.getElementById('closeHist').addEventListener('click', () => {
+    document.body.classList.remove('chat-mode');
+  });
+  document.getElementById('histClear').addEventListener('click', function() {
+    if (chatHistory.length === 0) return;
+    if (!this.classList.contains('confirm')) {
+      this.classList.add('confirm');
+      this.textContent = '再点一次确认清空';
+      setTimeout(() => {
+        this.classList.remove('confirm');
+        this.textContent = '清空记录';
+      }, 3000);
+      return;
+    }
+    chatHistory = [];
+    saveHistory();
+    renderHistory();
+    this.classList.remove('confirm');
+    this.textContent = '清空记录';
+  });
+  // Tab 切换
+  document.querySelectorAll('.set-panel .tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.set-panel .tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      const id = t.dataset.tab;
+      document.getElementById('tab-bg').style.display = id === 'bg' ? '' : 'none';
+      document.getElementById('tab-ball').style.display = id === 'ball' ? '' : 'none';
+      document.getElementById('tab-voice').style.display = id === 'voice' ? '' : 'none';
+    });
+  });
+  // 背景自定义
+  document.getElementById('applyClr').addEventListener('click', () => {
+    set.bg.type = 'color';
+    set.bg.c1 = document.getElementById('c1').value;
+    set.bg.c2 = document.getElementById('c2').value;
+    saveSet(); applyBg();
+  });
+  // 背景文件上传
+  document.getElementById('bgFileBtn').addEventListener('click', () => {
+    document.getElementById('bgFile').click();
+  });
+  document.getElementById('bgFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const btn = document.getElementById('bgFileBtn');
+    btn.textContent = '压缩中…'; btn.disabled = true;
+    const b64 = await fileToCompressedBase64(file, 800, 0.82);
+    if (b64) {
+      set.bg.file = b64;
+      set.bg.type = 'file';
+      saveSet(); applyBg(); renderSetPanel();
+    }
+    btn.textContent = '📁 选择图片'; btn.disabled = false;
+  });
+  document.getElementById('bgClearBtn').addEventListener('click', () => {
+    set.bg.file = '';
+    saveSet(); applyBg(); renderSetPanel();
+  });
+  document.getElementById('bgUrl').addEventListener('change', () => {
+    const v = document.getElementById('bgUrl').value.trim();
+    set.bg.url = v;
+    if (v) set.bg.type = 'url';
+    saveSet(); applyBg();
+  });
+  // 美化总开关
+  document.getElementById('beautifyToggle').addEventListener('change', (e) => {
+    set.bg.beautify = e.target.checked;
+    document.getElementById('beautifyState').textContent = e.target.checked ? '开' : '关';
+    saveSet(); applyBg();
+  });
+  // 小球图片上传
+  document.getElementById('ballFileBtn').addEventListener('click', () => {
+    document.getElementById('ballFile').click();
+  });
+  document.getElementById('ballFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const btn = document.getElementById('ballFileBtn');
+    btn.textContent = '压缩中…'; btn.disabled = true;
+    const b64 = await fileToCompressedBase64(file, 512, 0.85);
+    if (b64) {
+      set.ball.img = b64;
+      saveSet(); applyBall(); renderSetPanel();
+    }
+    btn.textContent = '📁 选一张当球'; btn.disabled = false;
+  });
+  document.getElementById('ballImgClear').addEventListener('click', () => {
+    set.ball.img = '';
+    saveSet(); applyBall(); renderSetPanel();
+  });
+  // 小球颜色应用
+  document.getElementById('applyBall').addEventListener('click', () => {
+    set.ball.c1 = document.getElementById('bc1').value;
+    set.ball.c2 = document.getElementById('bc2').value;
+    saveSet(); applyBall();
+  });
+  document.getElementById('applyTxt').addEventListener('click', () => {
+    set.ball.text = document.getElementById('ballTxt').value.trim();
+    saveSet(); applyBall();
+  });
+  // 语音设置：所有字段用 input 事件实时保存，避免失焦前点试听读到旧值
+  document.getElementById('voiceEnable').addEventListener('change', (e) => {
+    set.voice.enable = e.target.checked;
+    document.getElementById('voiceEnableState').textContent = e.target.checked ? '开' : '关';
+    saveSet();
+  });
+  document.getElementById('ttsApiKey').addEventListener('input', (e) => {
+    set.voice.apiKey = e.target.value.trim(); saveSet();
+  });
+  document.getElementById('ttsGroupId').addEventListener('input', (e) => {
+    set.voice.groupId = e.target.value.trim(); saveSet();
+  });
+  document.getElementById('ttsModel').addEventListener('input', (e) => {
+    set.voice.model = e.target.value.trim() || 'speech-02-turbo'; saveSet();
+  });
+  document.getElementById('ttsVoiceId').addEventListener('input', (e) => {
+    set.voice.voiceId = e.target.value.trim(); saveSet();
+  });
+  document.getElementById('ttsSpeed').addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    set.voice.speed = v;
+    document.getElementById('ttsSpeedVal').textContent = v.toFixed(2);
+    saveSet();
+  });
+  document.getElementById('voiceFallback').addEventListener('change', (e) => {
+    set.voice.fallback = e.target.checked;
+    document.getElementById('voiceFallbackState').textContent = e.target.checked ? '开' : '关';
+    saveSet();
+  });
+  // 语音对话模式开关
+  document.getElementById('voiceInputEnable').addEventListener('change', (e) => {
+    set.voice.voiceInput = e.target.checked;
+    document.getElementById('voiceInputState').textContent = e.target.checked ? '开' : '关';
+    saveSet();
+    if (e.target.checked) startVoiceConv();
+    else stopVoiceConv();
+  });
+  // —— 语音对话模式：自动持续听，循环对话 ——
+  let _vcActive = false;       // 模式是否开启
+  let _vcPhase = 'idle';       // idle/listening/recognizing/speaking
+  let _mediaRec = null;
+  let _recChunks = [];
+  let _recStream = null;
+  let _audioCtx = null;
+  let _analyser = null;
+  let _vadTimer = null;
+  let _lastSoundTime = 0;
+  let _hasSpeech = false;
+  let _vcMime = '';
+
+  function setVcPhase(p) {
+    _vcPhase = p;
+    const ballText = document.getElementById('ballText');
+    if (!ballText) return;
+    if (p === 'listening')     ballText.textContent = '在 听';
+    else if (p === 'recognizing') ballText.textContent = '想 想';
+    else if (p === 'speaking')    ballText.textContent = '在 说';
+    else if (p === 'idle')        ballText.textContent = '';
+  }
+
+  async function startVoiceConv() {
+    if (_vcActive) return;
+    const v = set.voice;
+    if (!v.apiKey || !v.groupId) {
+      alert('先在设置 → 语音里填 MiniMax API Key 和 Group ID');
+      document.getElementById('voiceInputEnable').checked = false;
+      document.getElementById('voiceInputState').textContent = '关';
+      set.voice.voiceInput = false;
+      saveSet();
+      return;
+    }
+    if (!v.enable) {
+      // 语音对话模式需要 TTS 也开着（朗读回复）
+      v.enable = true;
+      document.getElementById('voiceEnable').checked = true;
+      document.getElementById('voiceEnableState').textContent = '开';
+      saveSet();
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('浏览器不支持录音（HTTP 站点或老浏览器，手机需 HTTPS）');
+      document.getElementById('voiceInputEnable').checked = false;
+      document.getElementById('voiceInputState').textContent = '关';
+      set.voice.voiceInput = false;
+      saveSet();
+      return;
+    }
+    _vcActive = true;
+    // 修改 stage 提示
+    const stage = document.getElementById('stage');
+    if (stage) stage.title = '语音对话中：直接说话就行';
+    vcListen();
+  }
+
+  function stopVoiceConv() {
+    _vcActive = false;
+    cleanupRec();
+    setVcPhase('idle');
+    const stage = document.getElementById('stage');
+    if (stage) stage.title = '';
+  }
+
+  async function vcListen() {
+    if (!_vcActive) return;
+    // 上一轮 TTS 还在说，等说完再听
+    if (_vcPhase === 'speaking') return;
+    setVcPhase('listening');
+    try {
+      _recStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+      });
+    } catch (err) {
+      alert('麦克风获取失败：' + err.message + '\n手机需要 HTTPS 才能用麦克风');
+      stopVoiceConv();
+      document.getElementById('voiceInputEnable').checked = false;
+      document.getElementById('voiceInputState').textContent = '关';
+      set.voice.voiceInput = false;
+      saveSet();
+      return;
+    }
+    const track = _recStream.getAudioTracks()[0];
+    if (!track || track.readyState !== 'live') {
+      // 麦克风没启动，1 秒后重试
+      cleanupRec();
+      setTimeout(vcListen, 1000);
+      return;
+    }
+    // AudioContext 用于 VAD
+    try {
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = _audioCtx.createMediaStreamSource(_recStream);
+      _analyser = _audioCtx.createAnalyser();
+      _analyser.fftSize = 512;
+      src.connect(_analyser);
+    } catch (err) { console.warn('AudioContext 失败', err); }
+
+    _vcMime = '';
+    const candidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+    for (const c of candidates) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) { _vcMime = c; break; }
+    }
+    try {
+      _mediaRec = _vcMime ? new MediaRecorder(_recStream, { mimeType: _vcMime })
+                          : new MediaRecorder(_recStream);
+      if (_vcMime) _vcMime = _mediaRec.mimeType || _vcMime;
+    } catch (err) {
+      alert('录音启动失败：' + err.message);
+      stopVoiceConv();
+      return;
+    }
+    _recChunks = [];
+    _hasSpeech = false;
+    _lastSoundTime = Date.now();
+    _mediaRec.ondataavailable = (e) => { if (e.data.size > 0) _recChunks.push(e.data); };
+    _mediaRec.onstop = async () => {
+      cleanupRec();
+      if (!_vcActive) return;
+      const blob = new Blob(_recChunks, { type: _vcMime || 'audio/webm' });
+      console.log('录音完成 size:', blob.size, 'hasSpeech:', _hasSpeech);
+      // 没说话就继续听下一轮
+      if (blob.size < 2000 || !_hasSpeech) {
+        setTimeout(vcListen, 200);
+        return;
+      }
+      setVcPhase('recognizing');
+      const v = set.voice;
+      const fd = new FormData();
+      fd.append('model', 'asr-1.0');
+      const ext = (_vcMime || 'audio/wav').split('/')[1].split(';')[0];
+      fd.append('file', blob, 'record.' + ext);
+      fd.append('response_format', 'json');
+      fetch('https://api.minimaxi.com/v1/speech_to_text', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + v.apiKey },
+        body: fd
+      }).then(r => r.text()).then(txt => {
+        let j;
+        try { j = JSON.parse(txt); } catch (_) { j = { raw: txt }; }
+        console.log('ASR 返回:', j);
+        const text = (j.text || '').trim();
+        if (!text) {
+          // 没识别到，继续听
+          setTimeout(vcListen, 500);
+          return;
+        }
+        // 发送（不显示文字气泡），球回复会触发 TTS 朗读
+        send('voice', text);
+      }).catch(err => {
+        console.error('识别失败', err);
+        setTimeout(vcListen, 1000);
+      });
+    };
+    try { _mediaRec.start(250); } catch (e) { _mediaRec.start(); }
+    // VAD 检测
+    _vadTimer = setInterval(() => {
+      if (!_analyser) return;
+      const data = new Uint8Array(_analyser.fftSize);
+      _analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const vol = Math.sqrt(sum / data.length);
+      if (vol > 0.02) {
+        _lastSoundTime = Date.now();
+        _hasSpeech = true;
+      }
+      // 静音 1.5 秒自动停（且至少录过声音）
+      if (_hasSpeech && Date.now() - _lastSoundTime > 1500) {
+        try { _mediaRec.stop(); } catch (_) {}
+      }
+      // 30 秒还没说话，重新启动一次监听（避免长时间空录）
+      if (!_hasSpeech && Date.now() - _lastSoundTime > 30000) {
+        try { _mediaRec.stop(); } catch (_) {}
+      }
+    }, 100);
+  }
+
+  function cleanupRec() {
+    if (_vadTimer) { clearInterval(_vadTimer); _vadTimer = null; }
+    if (_recStream) _recStream.getTracks().forEach(t => t.stop());
+    if (_audioCtx) { try { _audioCtx.close(); } catch (_) {} _audioCtx = null; }
+    _analyser = null;
+    _mediaRec = null;
+  }
+
+  // 监听 TTS 朗读结束：在 speak() 里调 _onTtsEnd 钩子
+  let _onTtsEnd = null;
+  let _ttsTimeout = null;
+  function notifyTtsStart() {
+    setVcPhase('speaking');
+    // 30 秒还没结束就强制结束（防止卡死）
+    if (_ttsTimeout) clearTimeout(_ttsTimeout);
+    _ttsTimeout = setTimeout(() => {
+      console.warn('TTS 超时强制结束');
+      notifyTtsEnd();
+    }, 30000);
+  }
+  function notifyTtsEnd() {
+    if (_ttsTimeout) { clearTimeout(_ttsTimeout); _ttsTimeout = null; }
+    // 兼容 speaking/recognizing 两种阶段：TTS 失败或没东西读时，phase 可能还在 recognizing
+    if (_vcActive && (_vcPhase === 'speaking' || _vcPhase === 'recognizing')) {
+      // 关键：必须先把 phase 切回 idle，否则 800ms 后调 vcListen 时
+      // 它开头那句 if (_vcPhase === 'speaking') return 会直接返回，监听永远起不来
+      // 不调 setVcPhase 是为了避免 UI 闪烁，让球在这 800ms 内仍显示"在 说"
+      _vcPhase = 'idle';
+      // 朗读完了，等 800ms（避免录到尾音）继续听
+      setTimeout(() => { if (_vcActive) vcListen(); }, 800);
+    }
+  }
+  // 试听：强制从 DOM 读最新值再调用
+  document.getElementById('voiceTest').addEventListener('click', () => {
+    set.voice.apiKey   = document.getElementById('ttsApiKey').value.trim();
+    set.voice.groupId  = document.getElementById('ttsGroupId').value.trim();
+    set.voice.model    = document.getElementById('ttsModel').value.trim() || 'speech-02-turbo';
+    set.voice.voiceId  = document.getElementById('ttsVoiceId').value.trim();
+    set.voice.speed    = parseFloat(document.getElementById('ttsSpeed').value) || 1;
+    saveSet();
+    const oldEnable = set.voice.enable;
+    set.voice.enable = true;
+    speak('你好呀，我在呢。');
+    set.voice.enable = oldEnable;
+  });
+  // 恢复默认
+  document.getElementById('resetAll').addEventListener('click', () => {
+    if (!confirm('恢复默认背景和装扮？（上传的图片也会清掉）')) return;
+    set = JSON.parse(JSON.stringify(defaultSet));
+    saveSet(); applyBg(); applyBall(); renderSetPanel();
+  });
+
+  // —— 飘浮光点 ——
+  (function floaters() {
+    const box = document.getElementById('floaters');
+    if (!box) return;
+    for (let i = 0; i < 12; i++) {
+      const s = document.createElement('span');
+      const size = 3 + Math.random() * 6;
+      s.style.cssText = `width:${size}px;height:${size}px;left:${Math.random()*100}%;bottom:0;animation-duration:${12+Math.random()*16}s;animation-delay:${-Math.random()*20}s;`;
+      box.appendChild(s);
+    }
+  })();
+
+  // —— 开场 ——
+  applyBg();
+  document.documentElement.style.setProperty('--deco-scale', set.ball.decoScale || 1);
+  applyBall();
+  buildPool();
+  // 页面加载时如果语音对话模式是开的，自动启动
+  if (set.voice && set.voice.voiceInput) {
+    // 给个延迟等 stage 渲染好
+    setTimeout(() => {
+      if (set.voice.voiceInput) startVoiceConv();
+    }, 800);
+  }
+  tryConnect();
+</script>
+</body>
+</html>
