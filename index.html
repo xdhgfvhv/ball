@@ -115,6 +115,16 @@
     filter: grayscale(.6) brightness(.85);
     animation: none;
   }
+  /* 气态柔和模式：球本身消散开（径向渐变到透明），中心实色往外越来越浅，无硬圆轮廓 */
+  .ball.gas-mode {
+    width: 200px; height: 200px;
+    filter: drop-shadow(0 0 18px rgba(255,240,220,.55));
+    animation: bounce 2.4s ease-in-out infinite, gasBreath 5s ease-in-out infinite;
+  }
+  @keyframes gasBreath {
+    0%, 100% { filter: drop-shadow(0 0 14px rgba(255,240,220,.35)); }
+    50%      { filter: drop-shadow(0 0 28px rgba(255,240,220,.75)); }
+  }
   .ball.thinking { animation: think 1s ease-in-out infinite; }
   @keyframes think {
     0%,100% { transform: scale(1); }
@@ -353,6 +363,61 @@
   }
   .chat-clear:hover { background: rgba(200,68,68,.22); }
   .chat-clear.confirm { background: #c44; color: #fff; }
+
+  /* —— 自定义 modal（替代原生 prompt/confirm）—— */
+  .modal-mask {
+    position: fixed; inset: 0;
+    background: rgba(40,30,20,.55);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 300;  /* 比 chatPage(200) 和 overlay(100) 都高 */
+  }
+  .modal-box {
+    width: min(86vw, 340px);
+    background: linear-gradient(165deg, #fff8ec, #f5ead4);
+    border: 1px solid rgba(255,255,255,.6);
+    border-radius: 18px;
+    padding: 20px 18px 16px;
+    box-shadow: 0 12px 36px rgba(80,50,20,.25);
+    animation: modalIn .25s ease-out;
+  }
+  @keyframes modalIn {
+    from { transform: scale(.92); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+  }
+  .modal-msg {
+    color: #4a3c28; font-size: 14px; line-height: 1.55;
+    margin-bottom: 14px; white-space: pre-wrap;
+  }
+  .modal-input {
+    width: 100%; box-sizing: border-box;
+    padding: 9px 12px; font-size: 14px;
+    border: 1.5px solid rgba(200,144,72,.4);
+    border-radius: 10px;
+    background: rgba(255,255,255,.85);
+    color: #4a3c28;
+    margin-bottom: 14px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .modal-input:focus { border-color: #c89048; }
+  .modal-btns {
+    display: flex; gap: 10px; justify-content: flex-end;
+  }
+  .modal-btn {
+    padding: 7px 16px; font-size: 13px;
+    border: none; border-radius: 12px;
+    cursor: pointer; transition: all .2s;
+  }
+  .modal-btn.cancel {
+    background: rgba(120,90,50,.12); color: #7a5e34;
+  }
+  .modal-btn.cancel:hover { background: rgba(120,90,50,.22); }
+  .modal-btn.ok {
+    background: linear-gradient(135deg, #f4b870, #c89048); color: #fff;
+    font-weight: 600;
+  }
+  .modal-btn.ok:hover { filter: brightness(1.08); }
   .panel {
     width: min(94vw, 420px);
     max-height: 86vh;
@@ -1456,6 +1521,7 @@
       <div class="sel-toolbar" id="selToolbar" style="display:none">
         <label class="sel-all"><input type="checkbox" id="selAll"> 全选</label>
         <span class="sel-count">已选 <span id="selCount">0</span></span>
+        <button class="mini-btn" id="faceSelBtn">换表情</button>
         <button class="mini-btn danger" id="delSelBtn">删除选中</button>
       </div>
       <div class="custom-list" id="customList"></div>
@@ -1528,12 +1594,21 @@
         </div>
         <div class="field" id="ballColorField">
           <label>主体颜色</label>
-          <div class="clr-row">
+          <div class="ball-color-grid" id="ballColorGrid"></div>
+          <div class="clr-row" style="margin-top:8px;">
             <input type="color" id="bc1" value="#f4b870">
             <span class="clr-arrow">→</span>
             <input type="color" id="bc2" value="#c89048">
             <button class="mini-btn" id="applyBall">应用</button>
           </div>
+        </div>
+        <div class="field">
+          <label>球形态</label>
+          <div class="opt-row" id="gasOpts">
+            <button class="opt-chip" data-gas="off">光滑</button>
+            <button class="opt-chip" data-gas="on">气态柔和</button>
+          </div>
+          <div class="tip">气态：球体边缘虚化、像气体一样柔和，带5秒呼吸柔光</div>
         </div>
         <div class="field">
           <label>光环</label>
@@ -1557,20 +1632,20 @@
         </div>
         <div class="field">
           <label>MiniMax API Key</label>
-          <input type="password" id="ttsApiKey" placeholder="填 MiniMax API Key（Bearer）">
+          <input type="password" id="ttsApiKey" placeholder="粘贴 API Key">
           <div class="tip">在 MiniMax 控制台 → 接口密钥里获取</div>
         </div>
         <div class="field">
           <label>Group ID</label>
-          <input type="text" id="ttsGroupId" placeholder="例如 2075204005465690564">
+          <input type="text" id="ttsGroupId" placeholder="粘贴 Group ID">
         </div>
         <div class="field">
           <label>模型</label>
-          <input type="text" id="ttsModel" placeholder="speech-02-turbo">
+          <input type="text" id="ttsModel" placeholder="留空用默认模型">
         </div>
         <div class="field">
           <label>Voice ID</label>
-          <input type="text" id="ttsVoiceId" placeholder="例如 QinCheSylus1">
+          <input type="text" id="ttsVoiceId" placeholder="粘贴 Voice ID">
           <div class="tip">在 MiniMax 控制台 → 语音管理里挑一个声音复制 ID</div>
         </div>
         <div class="field">
@@ -1622,6 +1697,18 @@
     </div>
   </div>
 
+  <!-- 自定义 modal：替代原生 prompt/confirm（某些浏览器环境禁用了原生弹窗） -->
+  <div class="modal-mask" id="modalMask" style="display:none">
+    <div class="modal-box">
+      <div class="modal-msg" id="modalMsg"></div>
+      <input type="text" class="modal-input" id="modalInput" style="display:none" maxlength="20">
+      <div class="modal-btns">
+        <button class="modal-btn cancel" id="modalCancel">取消</button>
+        <button class="modal-btn ok" id="modalOk">确定</button>
+      </div>
+    </div>
+  </div>
+
 <script>
   // —— 任何 overlay 打开时直接把 stage 干掉（display:none），避免跳动 ——
   function syncStageVisibility() {
@@ -1638,6 +1725,68 @@
   _overlayObserver.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
   // 兜底：每秒检查一次，防止 observer 漏触发
   setInterval(syncStageVisibility, 1000);
+
+  // —— 自定义 modal：替代原生 prompt/confirm/alert（某些浏览器/WebView 禁用了原生弹窗）——
+  // 返回 Promise<string | null>：用户点确定 → 返回输入值（trim 过），点取消/遮罩/Esc → 返回 null
+  function customPrompt(message, defaultValue) {
+    return _showModal({ message, defaultValue, needInput: true });
+  }
+  // 返回 Promise<boolean>：确定 → true，取消 → false
+  function customConfirm(message) {
+    return _showModal({ message, needInput: false }).then(v => v !== null);
+  }
+  // 单按钮提示，返回 Promise<void>
+  function customAlert(message) {
+    return _showModal({ message, needInput: false, onlyOk: true }).then(() => {});
+  }
+  function _showModal({ message, defaultValue = '', needInput, onlyOk = false }) {
+    return new Promise(resolve => {
+      const mask = document.getElementById('modalMask');
+      const msg  = document.getElementById('modalMsg');
+      const inp  = document.getElementById('modalInput');
+      const ok   = document.getElementById('modalOk');
+      const ca   = document.getElementById('modalCancel');
+      msg.textContent = message || '';
+      // 单按钮模式：隐藏取消按钮
+      ca.style.display = onlyOk ? 'none' : '';
+      if (needInput) {
+        inp.style.display = '';
+        inp.value = defaultValue || '';
+        // 异步聚焦，避免动画期间焦点丢失
+        setTimeout(() => { inp.focus(); inp.select(); }, 50);
+      } else {
+        inp.style.display = 'none';
+      }
+      mask.style.display = 'flex';
+      const close = (val) => {
+        mask.style.display = 'none';
+        ok.removeEventListener('click', onOk);
+        ca.removeEventListener('click', onCa);
+        mask.removeEventListener('click', onMask);
+        document.removeEventListener('keydown', onKey);
+        resolve(val);
+      };
+      const onOk = () => {
+        if (needInput) {
+          const v = inp.value.trim();
+          close(v);
+        } else {
+          close(true);
+        }
+      };
+      const onCa = () => close(needInput ? null : false);
+      const onMask = (e) => { if (e.target === mask) close(needInput ? null : false); };
+      const onKey = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+        else if (e.key === 'Escape' && !onlyOk) { e.preventDefault(); onCa(); }
+        else if (e.key === 'Escape' && onlyOk) { e.preventDefault(); onOk(); }
+      };
+      ok.addEventListener('click', onOk);
+      if (!onlyOk) ca.addEventListener('click', onCa);
+      mask.addEventListener('click', onMask);
+      document.addEventListener('keydown', onKey);
+    });
+  }
 
   // —— 连接状态 ——
   // off: 没连上 / weak: 信号弱 / on: 连上了
@@ -1948,7 +2097,7 @@
   }
 
   // 添加自定义表情
-  function addFace() {
+  async function addFace() {
     const inp = document.getElementById('faceInput');
     let v = inp.value.trim();
     if (!v) return;
@@ -1963,7 +2112,7 @@
       }
     }
     if (added === 0) {
-      alert('这个表情已经有了');
+      await customAlert('这个表情已经有了');
       return;
     }
     saveExtraFaces();
@@ -1984,27 +2133,27 @@
   document.addEventListener('click', closeAllFacePop);
 
   // —— 分组管理 ——
-  function addGroup() {
-    const name = (prompt('新分组名字：', '新分组') || '').trim();
+  async function addGroup() {
+    const name = await customPrompt('新分组名字：', '新分组');
     if (!name) return;
     customGroups.push({ id: gid(), name, cards: [] });
     curGroupId = customGroups[customGroups.length - 1].id;
     selectedCards.clear();
     saveCustom(); renderCustomList();
   }
-  function renameGroup(id) {
+  async function renameGroup(id) {
     const g = customGroups.find(x => x.id === id);
     if (!g) return;
-    const name = (prompt('分组新名字：', g.name) || '').trim();
+    const name = await customPrompt('分组新名字：', g.name);
     if (!name) return;
     g.name = name;
     saveCustom(); renderCustomList();
   }
-  function deleteGroup(id) {
+  async function deleteGroup(id) {
     const g = customGroups.find(x => x.id === id);
     if (!g) return;
-    if (customGroups.length <= 1) { alert('至少要保留一个分组'); return; }
-    if (!confirm(`删除分组「${g.name}」？里面的 ${g.cards.length} 句字卡也会一起删掉。`)) return;
+    if (customGroups.length <= 1) { await customAlert('至少要保留一个分组'); return; }
+    if (!await customConfirm(`删除分组「${g.name}」？里面的 ${g.cards.length} 句字卡也会一起删掉。`)) return;
     customGroups = customGroups.filter(x => x.id !== id);
     if (curGroupId === id) curGroupId = customGroups[0].id;
     selectedCards.clear();
@@ -2146,15 +2295,27 @@
     }
     renderCustomList();
   });
-  document.getElementById('delSelBtn').addEventListener('click', () => {
+  document.getElementById('delSelBtn').addEventListener('click', async () => {
     const g = getCurGroup();
     if (!g) return;
     const idxs = [];
     g.cards.forEach((_, i) => { if (selectedCards.has(selKey(g.id, i))) idxs.push(i); });
     if (idxs.length === 0) return;
-    if (!confirm(`删除选中的 ${idxs.length} 句字卡？`)) return;
+    if (!await customConfirm(`删除选中的 ${idxs.length} 句字卡？`)) return;
     g.cards = g.cards.filter((_, i) => !selectedCards.has(selKey(g.id, i)));
     selectedCards.clear();
+    saveCustom(); buildPool(); renderCustomList();
+  });
+  // 批量换表情：把所有选中字卡的表情都改成用户输入的那个
+  document.getElementById('faceSelBtn').addEventListener('click', async () => {
+    const g = getCurGroup();
+    if (!g) return;
+    const idxs = [];
+    g.cards.forEach((_, i) => { if (selectedCards.has(selKey(g.id, i))) idxs.push(i); });
+    if (idxs.length === 0) return;
+    const face = await customPrompt(`给选中的 ${idxs.length} 句字卡换什么表情？\n（粘 emoji 或文字，留空取消）`, g.cards[idxs[0]].face || '🙂');
+    if (!face) return;
+    idxs.forEach(i => { g.cards[i].face = face.slice(0, 6); });
     saveCustom(); buildPool(); renderCustomList();
   });
 
@@ -2176,10 +2337,10 @@
   });
 
 
-  document.getElementById('saveCard').addEventListener('click', () => {
+  document.getElementById('saveCard').addEventListener('click', async () => {
     const raw = document.getElementById('cline').value.trim();
     if (!raw) {
-      alert('请填内容，一行一句');
+      await customAlert('请填内容，一行一句');
       return;
     }
     const lines = raw.split(/\n+/).map(s => s.trim()).filter(x => x);
@@ -2195,7 +2356,7 @@
       }
     }
     if (added === 0) {
-      alert('这些已经在字卡里了');
+      await customAlert('这些已经在字卡里了');
       return;
     }
     saveCustom();
@@ -2620,6 +2781,7 @@
     ball: {
       c1: '#f4b870', c2: '#c89048',
       halo: 'none',
+      gas: false,
       decos: [],
       text: '',
       img: '',
@@ -2695,13 +2857,24 @@
     { id: 'ocean',    name: '深海',  css: 'linear-gradient(165deg,#2d3e55 0%,#3e5a78 50%,#547394 100%)' },
     { id: 'night',    name: '星夜',  css: 'linear-gradient(165deg,#1a1a3a 0%,#2b2855 50%,#423870 100%)' }
   ];
-  // 光环选项
+  // 预设球颜色：c1 是高光色，c2 是阴影色，多个浅色系可选
+  const presetBallColors = [
+    { id: 'gold',    name: '金黄', c1: '#f4b870', c2: '#c89048' },
+    { id: 'cream',   name: '奶白', c1: '#fff5e1', c2: '#e8d4a8' },
+    { id: 'rose',    name: '浅粉', c1: '#ffd9d4', c2: '#f4a8a8' },
+    { id: 'sky',     name: '浅蓝', c1: '#d4e8ff', c2: '#a8c4f4' },
+    { id: 'mint',    name: '浅绿', c1: '#d4f4e0', c2: '#a8e8c4' },
+    { id: 'lilac',   name: '浅紫', c1: '#e8d4ff', c2: '#c4a8f4' },
+    { id: 'pearl',   name: '珍珠', c1: '#f0f0f0', c2: '#c8c8c8' },
+    { id: 'mocha',   name: '摩卡', c1: '#d4b890', c2: '#8a6a48' }
+  ];
+  // 光环选项：基于"中心径向渐变圆斑"主题的几种形态
   const halos = [
-    { id: 'none',   name: '无' },
-    { id: 'soft',   name: '柔光' },
-    { id: 'strong', name: '强光' },
-    { id: 'star',   name: '星光' },
-    { id: 'mist',   name: '雾蒙蒙' }
+    { id: 'none',     name: '无' },
+    { id: 'aura',     name: '柔光' },   // 暖色径向渐变光圈
+    { id: 'vignette', name: '晕影' },  // 深色中心径向渐变（图片那种 NOIR 风格）
+    { id: 'bokeh',    name: '光斑' },   // 多圈失焦光斑
+    { id: 'minimal',  name: '极简' }    // 纯白柔光
   ];
   // 小球装饰
   // type: emoji | cat-ear-l | cat-ear-r | cat-tail |
@@ -3070,6 +3243,9 @@
     ball.querySelectorAll('.ball-img').forEach(n => n.remove());
     ball.style.setProperty('--ball-img', 'none');
 
+    // 气态柔和模式开关
+    ball.classList.toggle('gas-mode', !!set.ball.gas);
+
     if (set.ball.img) {
       // 图片模式：cover 刚好贴满圆球
       ball.classList.add('img-mode', 'cover-mode');
@@ -3079,6 +3255,15 @@
         `0 14px 34px -10px rgba(0,0,0,.45), ` +
         `0 0 0 3px rgba(255,255,255,.9), ` +
         `inset 0 0 0 2px rgba(0,0,0,.15)`;
+    } else if (set.ball.gas) {
+      // 气态：球本身消散开，中心实色往外越来越浅直到透明，看不出圆轮廓
+      const c1 = set.ball.c1;
+      const c2 = set.ball.c2;
+      ball.style.background =
+        `radial-gradient(circle at 50% 50%, ` +
+        `${c1} 0%, ${c1} 18%, ${c2} 45%, rgba(0,0,0,0) 78%)`;
+      // 无硬阴影/外发光圆环，靠 background 的消散 + filter 柔光晕呼吸
+      ball.style.boxShadow = 'none';
     } else {
       ball.style.background =
         `radial-gradient(circle at 32% 28%, rgba(255,255,255,.65) 0%, ${set.ball.c1} 42%, ${set.ball.c2} 100%)`;
@@ -3103,70 +3288,165 @@
       }
     }
 
-    // 光环：插在 stage 里
+    // 光环：插在 stage 里（中心径向渐变圆斑风格）
     stage.querySelectorAll('.halo').forEach(n => n.remove());
     ball.classList.remove('halo-mist');
-    const makeHalo = (size, color, blur, delay) => {
-      const h = document.createElement('div');
-      h.className = 'halo';
-      h.style.cssText = `
-        width:${size}px; height:${size}px;
-        border:2px solid ${color};
-        box-shadow: 0 0 ${blur}px ${color};
-        opacity: .5;
-        animation: haloPulse 2.6s ease-in-out ${delay}s infinite;
-      `;
-      stage.appendChild(h);
-    };
-    if (!document.getElementById('haloAnimStyle')) {
-      const st = document.createElement('style');
-      st.id = 'haloAnimStyle';
-      st.textContent = `
-        @keyframes haloPulse {
-          0%,100% { transform: translate(-50%,-50%) scale(.95); opacity: .35; }
-          50%     { transform: translate(-50%,-50%) scale(1.1);  opacity: .85; }
-        }`;
-      document.head.appendChild(st);
+    // 旧值迁移：mist/soft → aura，strong/star → bokeh，其他不在新列表里 → none
+    const _validHalos = ['none', 'aura', 'vignette', 'bokeh', 'minimal'];
+    if (!_validHalos.includes(set.ball.halo)) {
+      const _legacyMap = { mist: 'aura', soft: 'aura', strong: 'bokeh', star: 'bokeh' };
+      set.ball.halo = _legacyMap[set.ball.halo] || 'none';
     }
-    if (set.ball.halo === 'soft') {
-      makeHalo(140, 'rgba(244,184,112,.5)', 6, 0);
-      makeHalo(170, 'rgba(244,184,112,.35)', 10, .4);
-    } else if (set.ball.halo === 'strong') {
-      makeHalo(150, 'rgba(255,230,160,.7)', 10, 0);
-      makeHalo(190, 'rgba(255,200,120,.5)', 16, .3);
-      makeHalo(230, 'rgba(255,180,90,.3)', 22, .6);
-    } else if (set.ball.halo === 'star') {
-      makeHalo(160, 'rgba(200,210,255,.6)', 8, 0);
-      makeHalo(200, 'rgba(170,180,255,.45)', 14, .5);
-    } else if (set.ball.halo === 'mist') {
-      // 雾蒙蒙：球体自身虚化 + 柔光晕染（Claude 那种高级感）
-      ball.classList.add('halo-mist');
-      const glow = document.createElement('div');
-      glow.className = 'halo mist-glow';
-      stage.appendChild(glow);
-    }
-    if (!document.getElementById('mistAnimStyle')) {
+    // 一次性注入新光环样式
+    if (!document.getElementById('haloRadialStyle')) {
       const st = document.createElement('style');
-      st.id = 'mistAnimStyle';
+      st.id = 'haloRadialStyle';
       st.textContent = `
-        .ball.halo-mist {
-          filter: blur(1.6px) drop-shadow(0 0 14px rgba(255,240,220,.55));
+        .halo-radial {
+          position: absolute; top: 50%; left: 50%;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          pointer-events: none;
+          animation: haloBreath 4s ease-in-out infinite;
         }
-        .mist-glow {
-          width: 220px; height: 220px;
+        .halo-aura {
+          width: 320px; height: 320px;
           background: radial-gradient(circle,
-            rgba(255,240,220,.45) 0%,
-            rgba(244,184,112,.22) 38%,
-            transparent 72%);
-          filter: blur(16px);
-          opacity: .85;
-          animation: mistBreath 5s ease-in-out infinite;
+            rgba(255,220,160,.7) 0%,
+            rgba(244,184,112,.4) 30%,
+            rgba(200,140,60,.12) 60%,
+            transparent 80%);
+          filter: blur(10px);
         }
-        @keyframes mistBreath {
+        .halo-vignette {
+          width: 360px; height: 360px;
+          background: radial-gradient(circle,
+            rgba(20,15,10,.6) 0%,
+            rgba(50,40,30,.35) 25%,
+            rgba(120,100,80,.15) 55%,
+            rgba(255,250,240,.05) 80%,
+            transparent 95%);
+          filter: blur(16px);
+        }
+        .halo-bokeh {
+          position: absolute; top: 50%; left: 50%;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          pointer-events: none;
+          background: radial-gradient(circle,
+            rgba(255,240,200,.5) 0%,
+            rgba(244,200,140,.22) 40%,
+            transparent 75%);
+          animation: haloBreath 3.5s ease-in-out infinite;
+        }
+        .halo-minimal {
+          width: 300px; height: 300px;
+          background: radial-gradient(circle,
+            rgba(255,255,255,.6) 0%,
+            rgba(255,250,240,.25) 40%,
+            transparent 75%);
+          filter: blur(8px);
+        }
+        /* 动态更明显：scale 1→1.25，opacity .55→1 */
+        @keyframes haloBreath {
           0%,100% { transform: translate(-50%,-50%) scale(1);    opacity: .55; }
-          50%     { transform: translate(-50%,-50%) scale(1.12); opacity:  .9; }
+          50%     { transform: translate(-50%,-50%) scale(1.25); opacity: 1; }
+        }
+
+        /* —— halo 选项按钮（预览式，不只是文字）—— */
+        .halo-chip {
+          display: flex; flex-direction: column; align-items: center; gap: 5px;
+          padding: 8px 10px !important;
+          min-width: 64px;
+        }
+        .halo-pv {
+          width: 38px; height: 38px; border-radius: 50%;
+          position: relative;
+          background: #f5ead4;
+        }
+        .halo-pv::after {
+          content: ''; position: absolute; inset: -8px; border-radius: 50%;
+          pointer-events: none;
+        }
+        .halo-pv-none {
+          background: #f5ead4;
+          border: 1px dashed rgba(200,144,72,.5);
+        }
+        .halo-pv-none::after { display: none; }
+        .halo-pv-aura {
+          background: radial-gradient(circle, #ffd99a 0%, #f4b870 50%, #c89048 100%);
+        }
+        .halo-pv-aura::after {
+          background: radial-gradient(circle, rgba(255,220,160,.8) 0%, rgba(244,184,112,.4) 35%, transparent 75%);
+        }
+        .halo-pv-vignette {
+          background: radial-gradient(circle, #1a1410 0%, #4a3a28 50%, #c8b89a 100%);
+        }
+        .halo-pv-vignette::after {
+          background: radial-gradient(circle, rgba(20,15,10,.85) 0%, rgba(60,50,40,.4) 30%, transparent 75%);
+        }
+        .halo-pv-bokeh {
+          background: radial-gradient(circle, #fff2c8 0%, #f4c878 60%, #c89a4a 100%);
+        }
+        .halo-pv-bokeh::after {
+          background: radial-gradient(circle, rgba(255,240,200,.6) 0%, rgba(244,200,140,.25) 40%, transparent 75%);
+        }
+        .halo-pv-minimal {
+          background: radial-gradient(circle, #ffffff 0%, #faf5ed 60%, #e8dfca 100%);
+        }
+        .halo-pv-minimal::after {
+          background: radial-gradient(circle, rgba(255,255,255,.85) 0%, rgba(255,250,240,.3) 40%, transparent 75%);
+        }
+        .halo-name { font-size: 11px; }
+
+        /* —— 预设球颜色（小球颜色选择网格）—— */
+        .ball-color-grid {
+          display: grid;
+          grid-template-columns: repeat(8, 1fr);
+          gap: 6px;
+          margin-bottom: 4px;
+        }
+        .ball-color-chip {
+          width: 100%; aspect-ratio: 1 / 1;
+          border-radius: 50%;
+          border: 2px solid transparent;
+          cursor: pointer;
+          transition: all .2s;
+          box-shadow: inset -2px -3px 5px rgba(0,0,0,.12), inset 2px 2px 4px rgba(255,255,255,.4);
+          padding: 0;
+        }
+        .ball-color-chip:hover { transform: scale(1.12); }
+        .ball-color-chip.on {
+          border-color: #c89048;
+          box-shadow: 0 0 0 2px rgba(244,184,112,.4), inset -2px -3px 5px rgba(0,0,0,.12), inset 2px 2px 4px rgba(255,255,255,.4);
         }`;
       document.head.appendChild(st);
+    }
+    if (set.ball.halo === 'aura') {
+      const h = document.createElement('div');
+      h.className = 'halo halo-radial halo-aura';
+      stage.appendChild(h);
+    } else if (set.ball.halo === 'vignette') {
+      const h = document.createElement('div');
+      h.className = 'halo halo-radial halo-vignette';
+      stage.appendChild(h);
+    } else if (set.ball.halo === 'bokeh') {
+      // 多圈失焦光斑，不同大小+不同延迟
+      [0, 1, 2].forEach(i => {
+        const h = document.createElement('div');
+        h.className = 'halo halo-bokeh';
+        const size = 220 + i * 60;
+        h.style.width = size + 'px';
+        h.style.height = size + 'px';
+        h.style.filter = `blur(${12 + i * 8}px)`;
+        h.style.animationDelay = (i * 0.6) + 's';
+        h.style.opacity = (0.85 - i * 0.2);
+        stage.appendChild(h);
+      });
+    } else if (set.ball.halo === 'minimal') {
+      const h = document.createElement('div');
+      h.className = 'halo halo-radial halo-minimal';
+      stage.appendChild(h);
     }
 
     // 装饰
@@ -3225,11 +3505,36 @@
     document.getElementById('bc1').value = set.ball.c1;
     document.getElementById('bc2').value = set.ball.c2;
     document.getElementById('ballTxt').value = set.ball.text || '';
+    // 预设球颜色（点击一键应用）
+    const bcg = document.getElementById('ballColorGrid');
+    bcg.innerHTML = presetBallColors.map(p => {
+      // 当前选中判断：c1/c2 都匹配
+      const on = (set.ball.c1 || '').toLowerCase() === p.c1.toLowerCase()
+              && (set.ball.c2 || '').toLowerCase() === p.c2.toLowerCase();
+      // 预览球：实际渲染径向渐变 + 高光，跟真球长一样
+      const bg = `radial-gradient(circle at 32% 28%, rgba(255,255,255,.65) 0%, ${p.c1} 42%, ${p.c2} 100%)`;
+      return `<button class="ball-color-chip ${on ? 'on' : ''}" data-c1="${p.c1}" data-c2="${p.c2}" title="${p.name}" style="background:${bg}"></button>`;
+    }).join('');
+    bcg.querySelectorAll('.ball-color-chip').forEach(b => {
+      b.addEventListener('click', () => {
+        set.ball.c1 = b.dataset.c1;
+        set.ball.c2 = b.dataset.c2;
+        // 同步到 color input
+        document.getElementById('bc1').value = set.ball.c1;
+        document.getElementById('bc2').value = set.ball.c2;
+        saveSet(); applyBall(); renderSetPanel();
+      });
+    });
     // 小球：有图片就显示"换回球"
     const hasImg = !!set.ball.img;
     document.getElementById('ballImgClear').style.display = hasImg ? '' : 'none';
     document.getElementById('ballColorField').style.opacity = hasImg ? 0.4 : 1;
     document.getElementById('ballColorField').style.pointerEvents = hasImg ? 'none' : 'auto';
+    // 球形态按钮初始状态
+    document.querySelectorAll('#gasOpts [data-gas]').forEach(b => {
+      const want = (b.dataset.gas === 'on') === !!set.ball.gas;
+      b.classList.toggle('on', want);
+    });
 
     // 语音设置
     document.getElementById('voiceEnable').checked = !!set.voice.enable;
@@ -3250,9 +3555,13 @@
 
     // 光环
     const ho = document.getElementById('haloOpts');
-    ho.innerHTML = halos.map(h =>
-      `<button class="opt-chip ${set.ball.halo===h.id?'on':''}" data-id="${h.id}">${h.name}</button>`
-    ).join('');
+    // 预览式按钮：每个按钮里直接显示对应 halo 的实际效果，不只是文字
+    ho.innerHTML = halos.map(h => {
+      const pv = h.id === 'none'
+        ? `<div class="halo-pv halo-pv-none"></div>`
+        : `<div class="halo-pv halo-pv-${h.id}"></div>`;
+      return `<button class="opt-chip halo-chip ${set.ball.halo===h.id?'on':''}" data-id="${h.id}">${pv}<span class="halo-name">${h.name}</span></button>`;
+    }).join('');
     ho.querySelectorAll('.opt-chip').forEach(b => {
       b.addEventListener('click', () => {
         set.ball.halo = b.dataset.id;
@@ -3380,6 +3689,14 @@
     set.ball.text = document.getElementById('ballTxt').value.trim();
     saveSet(); applyBall();
   });
+  // 球形态切换：光滑 / 气态柔和
+  document.querySelectorAll('#gasOpts [data-gas]').forEach(b => {
+    b.addEventListener('click', () => {
+      set.ball.gas = b.dataset.gas === 'on';
+      saveSet(); applyBall();
+      document.querySelectorAll('#gasOpts [data-gas]').forEach(x => x.classList.toggle('on', x === b));
+    });
+  });
   // 语音设置：所有字段用 input 事件实时保存，避免失焦前点试听读到旧值
   document.getElementById('voiceEnable').addEventListener('change', (e) => {
     set.voice.enable = e.target.checked;
@@ -3444,7 +3761,7 @@
     if (_vcActive) return;
     const v = set.voice;
     if (!v.apiKey || !v.groupId) {
-      alert('先在设置 → 语音里填 MiniMax API Key 和 Group ID');
+      await customAlert('先在设置 → 语音里填 MiniMax API Key 和 Group ID');
       document.getElementById('voiceInputEnable').checked = false;
       document.getElementById('voiceInputState').textContent = '关';
       set.voice.voiceInput = false;
@@ -3459,7 +3776,7 @@
       saveSet();
     }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('浏览器不支持录音（HTTP 站点或老浏览器，手机需 HTTPS）');
+      await customAlert('浏览器不支持录音（HTTP 站点或老浏览器，手机需 HTTPS）');
       document.getElementById('voiceInputEnable').checked = false;
       document.getElementById('voiceInputState').textContent = '关';
       set.voice.voiceInput = false;
@@ -3491,7 +3808,7 @@
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
       });
     } catch (err) {
-      alert('麦克风获取失败：' + err.message + '\n手机需要 HTTPS 才能用麦克风');
+      await customAlert('麦克风获取失败：' + err.message + '\n手机需要 HTTPS 才能用麦克风');
       stopVoiceConv();
       document.getElementById('voiceInputEnable').checked = false;
       document.getElementById('voiceInputState').textContent = '关';
@@ -3525,7 +3842,7 @@
                           : new MediaRecorder(_recStream);
       if (_vcMime) _vcMime = _mediaRec.mimeType || _vcMime;
     } catch (err) {
-      alert('录音启动失败：' + err.message);
+      await customAlert('录音启动失败：' + err.message);
       stopVoiceConv();
       return;
     }
@@ -3644,8 +3961,8 @@
     set.voice.enable = oldEnable;
   });
   // 恢复默认
-  document.getElementById('resetAll').addEventListener('click', () => {
-    if (!confirm('恢复默认背景和装扮？（上传的图片也会清掉）')) return;
+  document.getElementById('resetAll').addEventListener('click', async () => {
+    if (!await customConfirm('恢复默认背景和装扮？（上传的图片也会清掉）')) return;
     set = JSON.parse(JSON.stringify(defaultSet));
     saveSet(); applyBg(); applyBall(); renderSetPanel();
   });
