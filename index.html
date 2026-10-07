@@ -1375,6 +1375,7 @@
   }
 
   /* —— 情绪动态 —— */
+  /* 傲娇：2D 摇摆 + 脸红（用户指定要回这个版本） */
   .ball.em-shy {
     animation: shyWiggle 1.6s ease-in-out infinite;
   }
@@ -1453,6 +1454,64 @@
     25% { transform: rotate(-5deg); }
     75% { transform: rotate(5deg); }
   }
+
+  /* —— Live2D 角色皮套 —— */
+  .character {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px; height: 320px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .char-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    transform-origin: center;
+    will-change: transform;
+  }
+  /* 眼以偏上为轴：眨眼往下合 */
+  .char-layer[data-layer="left-eye"],
+  .char-layer[data-layer="right-eye"] { transform-origin: 50% 35%; }
+  /* 眉以偏下为轴：抬眉往上挑 */
+  .char-layer[data-layer="left-brow"],
+  .char-layer[data-layer="right-brow"] { transform-origin: 50% 75%; }
+  /* 前发以偏上为轴：飘动往下垂 */
+  .char-layer[data-layer="front-hair"] { transform-origin: 50% 25%; }
+  /* 后发以偏下为轴 */
+  .char-layer[data-layer="back-hair"] { transform-origin: 50% 80%; }
+  /* 衣摆以偏上为轴 */
+  .char-layer[data-layer="cloth-hem"] { transform-origin: 50% 30%; }
+  /* 嘴以偏下中心为轴：张合 */
+  .char-layer[data-layer="mouth"] { transform-origin: 50% 60%; }
+  /* 没图的空层不占位（避免空 div 干扰） */
+  .char-layer:not([data-has-img]) { visibility: hidden; }
+  /* 设置面板里的图层上传行 */
+  .char-layers { display:flex; flex-direction:column; gap:6px; }
+  .char-layer-row {
+    display:flex; align-items:center; gap:8px;
+    padding:6px 8px; border:1px dashed rgba(180,150,100,.35);
+    border-radius:8px; background:rgba(255,255,255,.45);
+  }
+  .char-layer-row .char-layer-name {
+    flex:0 0 78px; font-size:13px; color:#5a4a30;
+  }
+  .char-layer-row .char-layer-thumb {
+    width:30px; height:30px; border-radius:5px;
+    background:#eee center/contain no-repeat;
+    border:1px solid rgba(0,0,0,.12); flex:0 0 30px;
+    background-color:#f3eee2;
+  }
+  .char-layer-row .char-layer-state {
+    flex:1; font-size:11px; color:#8a7a60;
+  }
+  @media (max-width: 600px) {
+    .character { width: 220px; height: 220px; }
+  }
 </style>
 </head>
 <body>
@@ -1469,6 +1528,21 @@
     <div class="ball" id="ball">
       <div class="face" id="face">🌀</div>
       <div class="ball-text" id="ballText">连 接 中</div>
+    </div>
+    <!-- Live2D 角色皮套：12 图层叠加，与 #ball 二选一显示 -->
+    <div class="character" id="character" style="display:none">
+      <div class="char-layer" data-layer="back-hair"></div>
+      <div class="char-layer" data-layer="body"></div>
+      <div class="char-layer" data-layer="face"></div>
+      <div class="char-layer" data-layer="left-brow"></div>
+      <div class="char-layer" data-layer="right-brow"></div>
+      <div class="char-layer" data-layer="left-eye"></div>
+      <div class="char-layer" data-layer="right-eye"></div>
+      <div class="char-layer" data-layer="mouth"></div>
+      <div class="char-layer" data-layer="front-hair"></div>
+      <div class="char-layer" data-layer="cloth-hem"></div>
+      <div class="char-layer" data-layer="blush"></div>
+      <div class="char-layer" data-layer="accessory"></div>
     </div>
   </div>
 
@@ -1569,6 +1643,7 @@
       <div class="tabs">
         <button class="tab active" data-tab="bg">背景</button>
         <button class="tab" data-tab="ball">小球装扮</button>
+        <button class="tab" data-tab="char">角色皮套</button>
         <button class="tab" data-tab="voice">语音</button>
       </div>
 
@@ -1717,6 +1792,31 @@
             <span style="color:#7a5e34;">语音对话模式</span>
           </label>
           <div class="tip">打开后自动持续听，不用按按钮，直接说话就行。说完→球回复→自动朗读→继续听下一句。手机需 HTTPS 才能录音</div>
+        </div>
+      </div>
+
+      <div class="tab-body" id="tab-char" style="display:none">
+        <div class="field">
+          <label class="switch-row">
+            <input type="checkbox" id="charEnable">
+            <span id="charEnableState">关</span>
+            <span style="color:#7a5e34;">启用角色模式（替代小球）</span>
+          </label>
+          <div class="tip">开启后角色皮套显示，小球隐藏；12 图层叠加成"会动的立绘"</div>
+        </div>
+        <div class="field">
+          <label>拆分图层（12 层，画布尺寸需完全一致）</label>
+          <div class="char-layers" id="charLayers"></div>
+          <div class="tip">按层级上传 PNG（透明背景）。嘴画中性闭合，左右眼/眉分开；每层角色位置要绝对一致</div>
+        </div>
+        <div class="field">
+          <button class="mini-btn" id="charClearAll">清空所有图层</button>
+        </div>
+        <div class="field">
+          <label>角色预设（整套图层一键切换）</label>
+          <button class="mini-btn" id="saveCharPreset" style="margin-bottom:8px;">＋ 存为预设</button>
+          <div class="preset-list" id="charPresetList"></div>
+          <div class="tip">存当前整套图层，点预设一键切回</div>
         </div>
       </div>
 
@@ -2681,6 +2781,7 @@
     const ball = document.getElementById('ball');
     if (!ball) return;
     ball.classList.remove('em-shy','em-angry','em-happy','em-sad','em-love','em-think');
+    charEmotion(emo); // 同步驱动角色皮套情绪
     if (!emo) return;
     ball.classList.add('em-' + emo);
     clearTimeout(emoTimer);
@@ -2926,6 +3027,10 @@
       fallback: false,  // API 失败用浏览器内置兜底
       rate: 1, pitch: 1, voiceName: '',  // 兜底用
       voiceInput: false  // 语音输入开关
+    },
+    character: {
+      enable: false,     // 角色模式开关
+      layers: {}         // 12 图层 base64，键为 layer id
     }
   };
   let set = JSON.parse(JSON.stringify(defaultSet));
@@ -2940,9 +3045,18 @@
       delete set.voice.key;
       if (!Array.isArray(set.ball.decos)) set.ball.decos = [];
       set.ball.decos = []; // 装饰功能暂时关闭，清空已选装饰
+      // 角色皮套合并（layers 是动态键对象，单独合并）
+      set.character = { enable: !!(s.character && s.character.enable), layers: (s.character && s.character.layers) || {} };
     }
   } catch(e){}
-  function saveSet() { localStorage.setItem('dressSet', JSON.stringify(set)); }
+  function saveSet() {
+    try { localStorage.setItem('dressSet', JSON.stringify(set)); }
+    catch(e) {
+      // 通常是角色图层太大撑爆 localStorage
+      console.warn('saveSet 失败', e);
+      customAlert('存不下啦，图片太多/太大。先删几个旧预设或换小图（建议每层 ≤ 800px）');
+    }
+  }
 
   // —— 图片压缩：把文件读成 base64 并缩放到指定最大尺寸 ——
   function fileToCompressedBase64(file, maxSize = 512, quality = 0.8) {
@@ -3547,7 +3661,8 @@
         .ball-color-chip.on {
           border-color: #c89048;
           box-shadow: 0 0 0 2px rgba(244,184,112,.4), inset -2px -3px 5px rgba(0,0,0,.12), inset 2px 2px 4px rgba(255,255,255,.4);
-        }`;
+        }
+`;
       document.head.appendChild(st);
     }
     if (set.ball.halo === 'aura') {
@@ -3598,6 +3713,296 @@
       bp.style.background = ball.style.background;
       bp.style.boxShadow = `inset -4px -5px 10px rgba(0,0,0,.1), inset 3px 3px 8px rgba(255,255,255,.45), 0 3px 10px -2px rgba(180,120,40,.35)`;
     }
+  }
+
+  // —— Live2D 角色皮套 ——
+  const CHAR_LAYERS = [
+    { id: 'back-hair',  name: '后发' },
+    { id: 'body',       name: '身体' },
+    { id: 'face',       name: '脸(无五官)' },
+    { id: 'left-brow',  name: '左眉' },
+    { id: 'right-brow', name: '右眉' },
+    { id: 'left-eye',   name: '左眼' },
+    { id: 'right-eye',  name: '右眼' },
+    { id: 'mouth',      name: '嘴(中性)' },
+    { id: 'front-hair', name: '前发' },
+    { id: 'cloth-hem',  name: '衣服下摆' },
+    { id: 'blush',      name: '腮红(可选)' },
+    { id: 'accessory',  name: '饰品(可选)' }
+  ];
+  const charEls = {}; // 缓存图层 DOM 引用，避免每帧 querySelector
+  function cacheCharEls() {
+    document.querySelectorAll('.char-layer').forEach(el => { charEls[el.dataset.layer] = el; });
+  }
+  function setLayerTF(id, tf) {
+    const el = charEls[id];
+    if (el) el.style.transform = tf;
+  }
+
+  // 图层压缩：保留透明通道（PNG，不用 JPEG）
+  function fileToPngBase64(file, maxSize = 1024) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > height && width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize; }
+          else if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(e.target.result);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // 渲染设置面板里的图层上传行
+  function renderCharLayers() {
+    const wrap = document.getElementById('charLayers');
+    if (!wrap) return;
+    wrap.innerHTML = CHAR_LAYERS.map(L => {
+      const has = !!set.character.layers[L.id];
+      const state = has ? '✓ 已上传' : '未上传';
+      const thumb = has ? `style="background-image:url('${set.character.layers[L.id]}')"` : '';
+      return `
+        <div class="char-layer-row" data-layer="${L.id}">
+          <span class="char-layer-name">${L.name}</span>
+          <span class="char-layer-thumb" ${thumb}></span>
+          <span class="char-layer-state">${state}</span>
+          <input type="file" accept="image/png,image/*" style="display:none">
+          <button class="mini-btn char-pick">📁 选图</button>
+          <button class="mini-btn ghost-btn char-clear" style="${has?'':'display:none'}">清除</button>
+        </div>`;
+    }).join('');
+    wrap.querySelectorAll('.char-layer-row').forEach(row => {
+      const id = row.dataset.layer;
+      const fileInput = row.querySelector('input[type=file]');
+      row.querySelector('.char-pick').addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async () => {
+        const f = fileInput.files[0];
+        if (!f) return;
+        const b64 = await fileToPngBase64(f, 768);
+        if (!b64) { customAlert('图片读取失败，换一张试试'); return; }
+        set.character.layers[id] = b64;
+        saveSet(); applyCharacter(); renderCharLayers();
+      });
+      row.querySelector('.char-clear').addEventListener('click', () => {
+        delete set.character.layers[id];
+        saveSet(); applyCharacter(); renderCharLayers();
+      });
+    });
+  }
+
+  // 应用角色皮套：把图层贴到 #character 各层，并切换模式
+  function applyCharacter() {
+    const ch = document.getElementById('character');
+    if (!ch) return;
+    cacheCharEls();
+    CHAR_LAYERS.forEach(L => {
+      const el = charEls[L.id];
+      if (!el) return;
+      const url = set.character.layers[L.id];
+      if (url) {
+        el.style.backgroundImage = `url("${url}")`;
+        el.setAttribute('data-has-img', '');
+      } else {
+        el.style.backgroundImage = 'none';
+        el.removeAttribute('data-has-img');
+      }
+    });
+    const ball = document.getElementById('ball');
+    const hasAny = Object.keys(set.character.layers).length > 0;
+    if (set.character.enable && hasAny) {
+      ch.style.display = '';
+      if (ball) ball.style.display = 'none';
+      startCharLoop();
+    } else {
+      ch.style.display = 'none';
+      if (ball) ball.style.display = '';
+      stopCharLoop();
+    }
+  }
+
+  // —— Live2D 渲染器：RAF 循环 + 全部动效 ——
+  const charState = {
+    t: 0, lastTs: 0, rafId: 0, running: false,
+    mx: 0, my: 0, smx: 0, smy: 0,           // 鼠标/触摸目标 + 平滑值
+    headRot: 0, headX: 0, headY: 0,
+    breath: 0,
+    blink: 0, blinkPhase: 'idle', blinkTimer: 2.5, blinkProg: 0,
+    mouthOpen: 0, speaking: false, mouthTimer: 0,
+    hairSway: 0, clothSway: 0,
+    emotion: '', emoTimer: 0,
+    emShyEye: 0, emHappyBounce: 0, emAngryShake: 0, emSadSink: 0,
+    emLovePulse: 0, emThinkTilt: 0, emBrowUp: 0, emBrowDown: 0
+  };
+  function charEmotion(emo) { charState.emotion = emo || ''; charState.emoTimer = 4; }
+  function charSpeaking(on) { charState.speaking = !!on; if (on) charState.mouthTimer = 0; }
+  function startCharLoop() {
+    if (charState.running) return;
+    charState.running = true;
+    charState.lastTs = performance.now();
+    charState.rafId = requestAnimationFrame(charTick);
+  }
+  function stopCharLoop() {
+    charState.running = false;
+    if (charState.rafId) cancelAnimationFrame(charState.rafId);
+  }
+  function computeEmotionTargets(emo) {
+    switch (emo) {
+      case 'shy':   return { shyEye: 0.55, happyBounce: 0, angryShake: 0, sadSink: 0, lovePulse: 0, thinkTilt: -3, browUp: 0, browDown: 0.6 };
+      case 'happy': return { shyEye: 0,    happyBounce: 1, angryShake: 0, sadSink: 0, lovePulse: 0, thinkTilt: 0, browUp: 0.3, browDown: 0 };
+      case 'angry': return { shyEye: 0,    happyBounce: 0, angryShake: 1, sadSink: 0, lovePulse: 0, thinkTilt: 0, browUp: 1, browDown: 0 };
+      case 'sad':   return { shyEye: 0.2,  happyBounce: 0, angryShake: 0, sadSink: 1, lovePulse: 0, thinkTilt: -2, browUp: 0, browDown: 1 };
+      case 'love':  return { shyEye: 0.7,  happyBounce: 0, angryShake: 0, sadSink: 0, lovePulse: 1, thinkTilt: 0, browUp: 0, browDown: 0 };
+      case 'think': return { shyEye: 0,   happyBounce: 0, angryShake: 0, sadSink: 0, lovePulse: 0, thinkTilt: 6, browUp: 0.3, browDown: 0 };
+      default:      return { shyEye: 0, happyBounce: 0, angryShake: 0, sadSink: 0, lovePulse: 0, thinkTilt: 0, browUp: 0, browDown: 0 };
+    }
+  }
+  function charTick(ts) {
+    if (!charState.running) return;
+    const dt = Math.min(0.05, (ts - charState.lastTs) / 1000);
+    charState.lastTs = ts;
+    charState.t += dt;
+    const t = charState.t;
+    // 鼠标平滑
+    charState.smx += (charState.mx - charState.smx) * 0.08;
+    charState.smy += (charState.my - charState.smy) * 0.08;
+    // 呼吸
+    charState.breath = Math.sin(t * 1.5) * 2.2;
+    // 头部摆动（缓慢正弦 + 鼠标跟随 + 思考倾斜）
+    charState.headRot = Math.sin(t * 0.6) * 1.5 + charState.smx * 4 + charState.emThinkTilt;
+    charState.headX = charState.smx * 8;
+    charState.headY = charState.smy * 6 + charState.breath + charState.emSadSink * 5;
+    charState.hairSway = Math.sin(t * 1.8) * 2 + charState.smx * 3;
+    charState.clothSway = Math.sin(t * 1.2 + 1) * 1.8 + charState.smx * 2;
+    // 眨眼
+    if (charState.blinkPhase === 'idle') {
+      charState.blinkTimer -= dt;
+      if (charState.blinkTimer <= 0) { charState.blinkPhase = 'closing'; charState.blinkProg = 0; }
+    } else if (charState.blinkPhase === 'closing') {
+      charState.blinkProg += dt / 0.12;
+      if (charState.blinkProg >= 1) { charState.blinkProg = 1; charState.blinkPhase = 'opening'; }
+    } else if (charState.blinkPhase === 'opening') {
+      charState.blinkProg -= dt / 0.15;
+      if (charState.blinkProg <= 0) { charState.blinkProg = 0; charState.blinkPhase = 'idle'; charState.blinkTimer = 2.5 + Math.random() * 3; }
+    }
+    charState.blink = Math.max(charState.blinkProg, charState.emShyEye);
+    // 嘴：说话随机抖动，否则回零
+    if (charState.speaking) {
+      charState.mouthTimer -= dt;
+      if (charState.mouthTimer <= 0) { charState.mouthOpen = 0.3 + Math.random() * 0.7; charState.mouthTimer = 0.06 + Math.random() * 0.1; }
+    } else {
+      charState.mouthOpen += (0 - charState.mouthOpen) * 0.2;
+    }
+    // 情绪修饰平滑过渡
+    const tg = computeEmotionTargets(charState.emotion);
+    charState.emShyEye       += (tg.shyEye       - charState.emShyEye)       * 0.1;
+    charState.emHappyBounce  += (tg.happyBounce  - charState.emHappyBounce)  * 0.1;
+    charState.emAngryShake   += (tg.angryShake   - charState.emAngryShake)   * 0.1;
+    charState.emSadSink      += (tg.sadSink      - charState.emSadSink)      * 0.1;
+    charState.emLovePulse    += (tg.lovePulse    - charState.emLovePulse)    * 0.1;
+    charState.emThinkTilt    += (tg.thinkTilt    - charState.emThinkTilt)    * 0.1;
+    charState.emBrowUp       += (tg.browUp       - charState.emBrowUp)       * 0.1;
+    charState.emBrowDown     += (tg.browDown     - charState.emBrowDown)     * 0.1;
+    if (charState.emotion) { charState.emoTimer -= dt; if (charState.emoTimer <= 0) charState.emotion = ''; }
+    // 渲染各层
+    const head = `rotate(${charState.headRot}deg) translate(${charState.headX}px, ${charState.headY}px)`;
+    const happyB = charState.emHappyBounce * Math.abs(Math.sin(t * 4)) * -6;
+    const loveP  = charState.emLovePulse * Math.sin(t * 5) * 0.04;
+    const angShk = charState.emAngryShake * (Math.random() - 0.5) * 3;
+    setLayerTF('body',       `translateY(${charState.breath + happyB}px) translateX(${angShk}px) scale(${1 + loveP})`);
+    setLayerTF('back-hair',  `rotate(${charState.headRot * 0.5}deg) translate(${charState.headX * 0.5}px, ${charState.headY * 0.5 + charState.hairSway * 0.6}px)`);
+    setLayerTF('face',       head);
+    setLayerTF('left-brow',  `${head} translateY(${-charState.emBrowUp * 3 + charState.emBrowDown * 3}px)`);
+    setLayerTF('right-brow', `${head} translateY(${-charState.emBrowUp * 3 + charState.emBrowDown * 3}px)`);
+    setLayerTF('left-eye',   `${head} scaleY(${1 - charState.blink}) translateX(${charState.smx * 2}px)`);
+    setLayerTF('right-eye',  `${head} scaleY(${1 - charState.blink}) translateX(${charState.smx * 2}px)`);
+    setLayerTF('mouth',      `${head} scaleY(${1 + charState.mouthOpen * 0.6})`);
+    setLayerTF('front-hair', `rotate(${charState.headRot * 0.7}deg) translate(${charState.headX * 0.7}px, ${charState.headY * 0.7 + charState.hairSway}px)`);
+    setLayerTF('cloth-hem',  `rotate(${Math.sin(t * 1.2) * 1.2}deg) translateX(${charState.clothSway}px)`);
+    setLayerTF('blush',      head);
+    setLayerTF('accessory',  head);
+    // 腮红显隐
+    if (charEls.blush && charEls.blush.hasAttribute('data-has-img')) {
+      charEls.blush.style.opacity = (charState.emotion === 'shy' || charState.emotion === 'love') ? '0.9' : '0.4';
+    }
+    charState.rafId = requestAnimationFrame(charTick);
+  }
+  // 鼠标/触摸/陀螺仪跟随
+  function setupCharPointer() {
+    window.addEventListener('mousemove', (e) => {
+      const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+      charState.mx = Math.max(-1, Math.min(1, (e.clientX - cx) / cx));
+      charState.my = Math.max(-1, Math.min(1, (e.clientY - cy) / cy));
+    });
+    window.addEventListener('touchmove', (e) => {
+      if (!e.touches[0]) return;
+      const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+      charState.mx = Math.max(-1, Math.min(1, (e.touches[0].clientX - cx) / cx));
+      charState.my = Math.max(-1, Math.min(1, (e.touches[0].clientY - cy) / cy));
+    }, { passive: true });
+    window.addEventListener('deviceorientation', (e) => {
+      if (e.beta == null) return;
+      charState.mx = Math.max(-1, Math.min(1, (e.gamma || 0) / 45));
+      charState.my = Math.max(-1, Math.min(1, ((e.beta || 0) - 45) / 45));
+    });
+  }
+  // 角色预设
+  async function saveCharPresetFn() {
+    const name = await customPrompt('给这套角色图层起个名：');
+    if (!name) return;
+    const presets = JSON.parse(localStorage.getItem('charPresets') || '[]');
+    let total = 0;
+    Object.values(set.character.layers).forEach(b => total += (b || '').length);
+    if (total > 4000000 && !await customConfirm('图层数据较大（>4MB），可能存不下，仍要保存吗？')) return;
+    try {
+      presets.push({ name, layers: set.character.layers, time: Date.now() });
+      localStorage.setItem('charPresets', JSON.stringify(presets));
+      renderCharPresets();
+    } catch (e) {
+      customAlert('存不下，图片太大。先删几个旧预设或换小图');
+    }
+  }
+  function renderCharPresets() {
+    const list = document.getElementById('charPresetList');
+    if (!list) return;
+    const presets = JSON.parse(localStorage.getItem('charPresets') || '[]');
+    list.innerHTML = presets.map((p, i) => {
+      const cnt = Object.keys(p.layers || {}).length;
+      const thumb = (p.layers && (p.layers['face'] || p.layers['body'] || Object.values(p.layers)[0])) || '';
+      return `
+        <div class="preset-item" data-i="${i}">
+          <div class="preset-thumb" style="${thumb ? `background-image:url('${thumb}')` : ''}"></div>
+          <span class="preset-name">${p.name}（${cnt}层）</span>
+          <button class="mini-btn char-load">加载</button>
+          <button class="mini-btn danger char-del">删</button>
+        </div>`;
+    }).join('');
+    list.querySelectorAll('.preset-item').forEach(it => {
+      const i = parseInt(it.dataset.i);
+      it.querySelector('.char-load').addEventListener('click', () => {
+        const p = presets[i];
+        set.character.layers = JSON.parse(JSON.stringify(p.layers || {}));
+        set.character.enable = true;
+        saveSet(); applyCharacter(); renderCharLayers(); renderCharPresets();
+        const cb = document.getElementById('charEnable');
+        if (cb) { cb.checked = true; document.getElementById('charEnableState').textContent = '开'; }
+      });
+      it.querySelector('.char-del').addEventListener('click', () => {
+        presets.splice(i, 1);
+        localStorage.setItem('charPresets', JSON.stringify(presets));
+        renderCharPresets();
+      });
+    });
   }
 
   // —— 渲染设置面板 UI ——
@@ -3681,6 +4086,12 @@
     document.getElementById('voiceInputEnable').checked = vIn;
     document.getElementById('voiceInputState').textContent = vIn ? '开' : '关';
 
+    // 角色皮套
+    document.getElementById('charEnable').checked = !!set.character.enable;
+    document.getElementById('charEnableState').textContent = set.character.enable ? '开' : '关';
+    renderCharLayers();
+    renderCharPresets();
+
     // 光环
     const ho = document.getElementById('haloOpts');
     // 预览式按钮：每个按钮里直接显示对应 halo 的实际效果，不只是文字
@@ -3747,9 +4158,25 @@
       const id = t.dataset.tab;
       document.getElementById('tab-bg').style.display = id === 'bg' ? '' : 'none';
       document.getElementById('tab-ball').style.display = id === 'ball' ? '' : 'none';
+      document.getElementById('tab-char').style.display = id === 'char' ? '' : 'none';
       document.getElementById('tab-voice').style.display = id === 'voice' ? '' : 'none';
     });
   });
+  // 角色皮套开关
+  document.getElementById('charEnable').addEventListener('change', (e) => {
+    set.character.enable = e.target.checked;
+    saveSet(); applyCharacter();
+    document.getElementById('charEnableState').textContent = e.target.checked ? '开' : '关';
+  });
+  document.getElementById('charClearAll').addEventListener('click', async () => {
+    if (!await customConfirm('清空所有角色图层？（上传的图都会清掉）')) return;
+    set.character.layers = {};
+    set.character.enable = false;
+    saveSet(); applyCharacter(); renderCharLayers();
+    document.getElementById('charEnable').checked = false;
+    document.getElementById('charEnableState').textContent = '关';
+  });
+  document.getElementById('saveCharPreset').addEventListener('click', saveCharPresetFn);
   // 背景自定义
   document.getElementById('applyClr').addEventListener('click', () => {
     set.bg.type = 'color';
@@ -4059,6 +4486,7 @@
   let _ttsTimeout = null;
   function notifyTtsStart() {
     setVcPhase('speaking');
+    charSpeaking(true); // 角色皮套嘴动开始
     // 30 秒还没结束就强制结束（防止卡死）
     if (_ttsTimeout) clearTimeout(_ttsTimeout);
     _ttsTimeout = setTimeout(() => {
@@ -4067,6 +4495,7 @@
     }, 30000);
   }
   function notifyTtsEnd() {
+    charSpeaking(false); // 角色皮套嘴动结束
     if (_ttsTimeout) { clearTimeout(_ttsTimeout); _ttsTimeout = null; }
     // 兼容 speaking/recognizing 两种阶段：TTS 失败或没东西读时，phase 可能还在 recognizing
     if (_vcActive && (_vcPhase === 'speaking' || _vcPhase === 'recognizing')) {
@@ -4101,7 +4530,10 @@
   document.getElementById('resetBall').addEventListener('click', async () => {
     if (!await customConfirm('恢复默认小球装扮？（上传的球图片、光环、气态等都会清掉）')) return;
     set.ball = JSON.parse(JSON.stringify(defaultSet.ball));
-    saveSet(); applyBall(); renderSetPanel();
+    // 同时关掉角色模式，回到纯球
+    set.character.enable = false;
+    set.character.layers = {};
+    saveSet(); applyBall(); applyCharacter(); renderSetPanel();
   });
 
   // —— 背景/小球预设：保存当前配置，一键切回 ——
@@ -4243,6 +4675,8 @@
   applyBg();
   document.documentElement.style.setProperty('--deco-scale', set.ball.decoScale || 1);
   applyBall();
+  setupCharPointer();
+  applyCharacter();
   buildPool();
   // 页面加载时如果语音对话模式是开的，自动启动
   if (set.voice && set.voice.voiceInput) {
