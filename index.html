@@ -568,6 +568,31 @@
     max-height: 240px; overflow-y: auto;
     padding-right: 4px;
   }
+  /* 预设列表（背景/小球） */
+  .preset-list {
+    display: flex; flex-direction: column; gap: 6px;
+    max-height: 200px; overflow-y: auto; padding-right: 4px;
+  }
+  .preset-item {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.7);
+    border-radius: 9px; padding: 6px 8px 6px 6px;
+    border: 2px solid transparent;
+    transition: border-color .2s;
+  }
+  .preset-item:hover { border-color: #f4b870; }
+  .preset-thumb {
+    width: 32px; height: 32px; border-radius: 50%;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #f4b870, #c89048);
+    background-size: cover; background-position: center;
+    box-shadow: inset -2px -2px 4px rgba(0,0,0,.15), inset 1px 1px 3px rgba(255,255,255,.4);
+  }
+  .preset-name {
+    flex: 1; font-size: 12px; color: #4a3c28;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .preset-item .mini-btn { padding: 3px 10px; font-size: 11px; height: auto; line-height: 1.4; }
   .line-row {
     display: flex; align-items: center; gap: 8px;
     background: rgba(255,255,255,0.7);
@@ -1509,7 +1534,14 @@
         <button class="p-btn primary" id="saveCard">加进去</button>
       </div>
 
-      <div class="list-title">已添加 <span id="listCount">0</span> 句</div>
+      <div class="list-title">
+        <span>已添加 <span id="listCount">0</span> 句</span>
+        <span class="io-btns">
+          <button class="mini-btn" id="exportCards">导出</button>
+          <button class="mini-btn" id="importCards">导入</button>
+          <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+        </span>
+      </div>
       <div class="group-bar" id="groupBar"></div>
       <div class="merge-row">
         <label class="merge-switch">
@@ -1576,6 +1608,12 @@
           </label>
           <div class="tip">关闭后页面更素净，适合不喜欢动态</div>
         </div>
+        <div class="field">
+          <label>背景预设（保存/一键切换）</label>
+          <button class="mini-btn" id="saveBgPreset" style="margin-bottom:8px;">＋ 存为预设</button>
+          <div class="preset-list" id="bgPresetList"></div>
+          <div class="tip">存当前背景（图/颜色/美化开关），点预设一键切回</div>
+        </div>
       </div>
 
       <div class="tab-body" id="tab-ball" style="display:none">
@@ -1618,6 +1656,12 @@
           <label>自定义文字（写在小球身上）</label>
           <input type="text" id="ballTxt" placeholder="比如：呆 着" maxlength="6">
           <button class="mini-btn" id="applyTxt" style="margin-top:6px;">应用</button>
+        </div>
+        <div class="field">
+          <label>小球预设（保存/一键切换）</label>
+          <button class="mini-btn" id="saveBallPreset" style="margin-bottom:8px;">＋ 存为预设</button>
+          <div class="preset-list" id="ballPresetList"></div>
+          <div class="tip">存当前小球（图/颜色/光环/气态/装饰/文字），点预设一键切回</div>
         </div>
       </div>
 
@@ -1677,7 +1721,8 @@
       </div>
 
       <div class="panel-btns">
-        <button class="p-btn ghost" id="resetAll">恢复默认</button>
+        <button class="p-btn ghost" id="resetBg">恢复背景</button>
+        <button class="p-btn ghost" id="resetBall">恢复小球</button>
         <button class="p-btn primary" id="closeSet">关闭</button>
       </div>
     </div>
@@ -2325,6 +2370,89 @@
     renderFacePick();
     renderCustomList();
   });
+
+  // —— 字卡导入导出 ——
+  // 导出：把所有分组 + 拼字卡模式打包成 JSON 下载
+  document.getElementById('exportCards').addEventListener('click', () => {
+    const data = {
+      type: 'ball-cards-backup',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      mergeMode,
+      customGroups
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `字卡备份_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+  // 导入：读 JSON 文件，合并到现有字卡（重复的跳过）
+  document.getElementById('importCards').addEventListener('click', () => {
+    document.getElementById('importFile').click();
+  });
+  document.getElementById('importFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.customGroups || !Array.isArray(data.customGroups)) {
+        await customAlert('文件格式不对，不是字卡备份文件');
+        return;
+      }
+      let added = 0, skipped = 0;
+      const choice = await customConfirm(
+        `导入 ${data.customGroups.reduce((s, g) => s + (g.cards?.length || 0), 0)} 句字卡？\n` +
+        `「确定」合并到现有（重复跳过），「取消」替换全部`
+      );
+      if (choice) {
+        // 合并：重复的跳过
+        data.customGroups.forEach(ng => {
+          if (!ng.id || !Array.isArray(ng.cards)) return;
+          const exist = customGroups.find(g => g.id === ng.id);
+          if (exist) {
+            ng.cards.forEach(nc => {
+              if (nc && nc.line && !exist.cards.find(c => c.line === nc.line && (c.face || '') === (nc.face || ''))) {
+                exist.cards.push({ face: nc.face || '🙂', line: nc.line });
+                added++;
+              } else { skipped++; }
+            });
+          } else {
+            customGroups.push({ id: ng.id, name: ng.name || '导入', cards: ng.cards.map(c => ({ face: c.face || '🙂', line: c.line })) });
+            added += ng.cards.length;
+          }
+        });
+      } else {
+        // 替换全部
+        const total = data.customGroups.reduce((s, g) => s + (g.cards?.length || 0), 0);
+        customGroups = data.customGroups.map(g => ({
+          id: g.id || 'g_' + Math.random().toString(36).slice(2, 8),
+          name: g.name || '导入',
+          cards: (g.cards || []).map(c => ({ face: c.face || '🙂', line: c.line }))
+        }));
+        if (customGroups.length === 0) customGroups.push({ id: 'g_default', name: '默认', cards: [] });
+        curGroupId = customGroups[0].id;
+        added = total;
+      }
+      if (data.mergeMode !== undefined) {
+        mergeMode = !!data.mergeMode;
+        localStorage.setItem('mergeCards', mergeMode ? '1' : '0');
+        const mt = document.getElementById('mergeToggle');
+        if (mt) mt.checked = mergeMode;
+      }
+      saveCustom(); buildPool(); renderCustomList();
+      await customAlert(`导入完成：新增 ${added} 句${skipped ? `，跳过 ${skipped} 句重复` : ''}`);
+    } catch (err) {
+      await customAlert('导入失败：' + err.message);
+    }
+    e.target.value = ''; // 重置以便重复导入同一文件
+  });
+
   document.getElementById('mergeToggle').addEventListener('change', (e) => {
     mergeMode = e.target.checked;
     localStorage.setItem('mergeCards', mergeMode ? '1' : '0');
@@ -3568,6 +3696,9 @@
         saveSet(); applyBall(); renderSetPanel();
       });
     });
+    // 渲染背景/小球预设列表（如果函数已定义）
+    if (typeof renderBgPresets === 'function') renderBgPresets();
+    if (typeof renderBallPresets === 'function') renderBallPresets();
   }
 
   // —— 设置面板事件 ——
@@ -3960,11 +4091,140 @@
     speak('你好呀，我在呢。');
     set.voice.enable = oldEnable;
   });
-  // 恢复默认
-  document.getElementById('resetAll').addEventListener('click', async () => {
-    if (!await customConfirm('恢复默认背景和装扮？（上传的图片也会清掉）')) return;
-    set = JSON.parse(JSON.stringify(defaultSet));
-    saveSet(); applyBg(); applyBall(); renderSetPanel();
+  // 单独恢复背景（不动小球和语音 API）
+  document.getElementById('resetBg').addEventListener('click', async () => {
+    if (!await customConfirm('恢复默认背景？（上传的背景图也会清掉）')) return;
+    set.bg = JSON.parse(JSON.stringify(defaultSet.bg));
+    saveSet(); applyBg(); renderSetPanel();
+  });
+  // 单独恢复小球装扮（不动背景和语音 API）
+  document.getElementById('resetBall').addEventListener('click', async () => {
+    if (!await customConfirm('恢复默认小球装扮？（上传的球图片、光环、气态等都会清掉）')) return;
+    set.ball = JSON.parse(JSON.stringify(defaultSet.ball));
+    saveSet(); applyBall(); renderSetPanel();
+  });
+
+  // —— 背景/小球预设：保存当前配置，一键切回 ——
+  let bgPresets = [];
+  let ballPresets = [];
+  try { bgPresets = JSON.parse(localStorage.getItem('bgPresets') || '[]'); } catch(e){}
+  try { ballPresets = JSON.parse(localStorage.getItem('ballPresets') || '[]'); } catch(e){}
+
+  function _presetThumbBg(bg) {
+    // 缩略图：有图用图，否则用颜色渐变
+    if (bg.file) return `url("${bg.file}") center/cover`;
+    if (bg.url) return `url("${bg.url}") center/cover, linear-gradient(135deg, ${bg.c1}, ${bg.c2})`;
+    return `linear-gradient(135deg, ${bg.c1 || '#f4ede0'}, ${bg.c2 || '#d9c8a8'})`;
+  }
+  function _presetThumbBall(b) {
+    if (b.img) return `url("${b.img}") center/cover`;
+    return `radial-gradient(circle at 32% 28%, rgba(255,255,255,.65) 0%, ${b.c1 || '#f4b870'} 42%, ${b.c2 || '#c89048'} 100%)`;
+  }
+  function _saveBgPresets() {
+    try { localStorage.setItem('bgPresets', JSON.stringify(bgPresets)); return true; }
+    catch (e) { return false; }
+  }
+  function _saveBallPresets() {
+    try { localStorage.setItem('ballPresets', JSON.stringify(ballPresets)); return true; }
+    catch (e) { return false; }
+  }
+  function renderBgPresets() {
+    const box = document.getElementById('bgPresetList');
+    if (!box) return;
+    if (bgPresets.length === 0) {
+      box.innerHTML = '<div class="empty-tip" style="font-size:11px;color:#a8956a;">还没有背景预设，点上面按钮存一个</div>';
+      return;
+    }
+    box.innerHTML = bgPresets.map(p => `
+      <div class="preset-item" data-id="${p.id}">
+        <div class="preset-thumb" style="background:${_presetThumbBg(p.bg)}"></div>
+        <div class="preset-name">${p.name}</div>
+        <button class="mini-btn" data-act="load">加载</button>
+        <button class="mini-btn danger" data-act="del">删</button>
+      </div>
+    `).join('');
+    box.querySelectorAll('.preset-item').forEach(item => {
+      const id = item.dataset.id;
+      item.querySelector('[data-act="load"]').addEventListener('click', async () => {
+        const p = bgPresets.find(x => x.id === id);
+        if (!p) return;
+        set.bg = JSON.parse(JSON.stringify(p.bg));
+        saveSet(); applyBg(); renderSetPanel();
+      });
+      item.querySelector('[data-act="del"]').addEventListener('click', async () => {
+        const p = bgPresets.find(x => x.id === id);
+        if (!p) return;
+        if (!await customConfirm(`删除背景预设「${p.name}」？`)) return;
+        bgPresets = bgPresets.filter(x => x.id !== id);
+        _saveBgPresets(); renderBgPresets();
+      });
+    });
+  }
+  function renderBallPresets() {
+    const box = document.getElementById('ballPresetList');
+    if (!box) return;
+    if (ballPresets.length === 0) {
+      box.innerHTML = '<div class="empty-tip" style="font-size:11px;color:#a8956a;">还没有小球预设，点上面按钮存一个</div>';
+      return;
+    }
+    box.innerHTML = ballPresets.map(p => `
+      <div class="preset-item" data-id="${p.id}">
+        <div class="preset-thumb" style="background:${_presetThumbBall(p.ball)}"></div>
+        <div class="preset-name">${p.name}</div>
+        <button class="mini-btn" data-act="load">加载</button>
+        <button class="mini-btn danger" data-act="del">删</button>
+      </div>
+    `).join('');
+    box.querySelectorAll('.preset-item').forEach(item => {
+      const id = item.dataset.id;
+      item.querySelector('[data-act="load"]').addEventListener('click', async () => {
+        const p = ballPresets.find(x => x.id === id);
+        if (!p) return;
+        set.ball = JSON.parse(JSON.stringify(p.ball));
+        saveSet(); applyBall(); renderSetPanel();
+      });
+      item.querySelector('[data-act="del"]').addEventListener('click', async () => {
+        const p = ballPresets.find(x => x.id === id);
+        if (!p) return;
+        if (!await customConfirm(`删除小球预设「${p.name}」？`)) return;
+        ballPresets = ballPresets.filter(x => x.id !== id);
+        _saveBallPresets(); renderBallPresets();
+      });
+    });
+  }
+  // 保存当前背景为预设
+  document.getElementById('saveBgPreset').addEventListener('click', async () => {
+    const name = await customPrompt('给这个背景预设起个名字？', '我的背景');
+    if (!name) return;
+    const p = {
+      id: 'bgp_' + Date.now(),
+      name: name.slice(0, 20),
+      bg: JSON.parse(JSON.stringify(set.bg))
+    };
+    bgPresets.push(p);
+    if (!_saveBgPresets()) {
+      bgPresets = bgPresets.filter(x => x.id !== p.id);
+      await customAlert('存不下：图片太大，localStorage 满了。试试用更小的图，或先删几个旧预设');
+      return;
+    }
+    renderBgPresets();
+  });
+  // 保存当前小球为预设
+  document.getElementById('saveBallPreset').addEventListener('click', async () => {
+    const name = await customPrompt('给这个小球预设起个名字？', '我的小球');
+    if (!name) return;
+    const p = {
+      id: 'blp_' + Date.now(),
+      name: name.slice(0, 20),
+      ball: JSON.parse(JSON.stringify(set.ball))
+    };
+    ballPresets.push(p);
+    if (!_saveBallPresets()) {
+      ballPresets = ballPresets.filter(x => x.id !== p.id);
+      await customAlert('存不下：图片太大，localStorage 满了。试试用更小的图，或先删几个旧预设');
+      return;
+    }
+    renderBallPresets();
   });
 
   // —— 飘浮光点 ——
