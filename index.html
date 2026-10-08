@@ -1463,10 +1463,7 @@
     width: 400px; height: 400px;
     pointer-events: none;
     z-index: 5;
-    transition: top 0.3s ease;
   }
-  /* 打字时皮套上移避免挡输入框/键盘 */
-  .character.char-input-active { top: 36%; }
   .char-layer {
     position: absolute;
     top: 0; left: 0;
@@ -3981,13 +3978,6 @@
       charState.mx = Math.max(-1, Math.min(1, (e.touches[0].clientX - cx) / cx));
       charState.my = Math.max(-1, Math.min(1, (e.touches[0].clientY - cy) / cy));
     }, { passive: true });
-    // 打字时皮套上移避免挡输入框/键盘
-    const inp = document.getElementById('input');
-    const ch = document.getElementById('character');
-    if (inp && ch) {
-      inp.addEventListener('focus', () => ch.classList.add('char-input-active'));
-      inp.addEventListener('blur', () => ch.classList.remove('char-input-active'));
-    }
   }
   // 角色预设
   async function saveCharPresetFn() {
